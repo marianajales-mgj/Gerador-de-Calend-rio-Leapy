@@ -85,10 +85,17 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
     const initialImmersionHours = data.immersionDays * HOURS_PER_DAY;
     const isInitialImmersionPhase = loopTheoryHours < initialImmersionHours;
 
-    const isFinalImmersionPhase = 
-        !isInitialImmersionPhase && 
+    // Final Immersion is always the last block of the contract: it only starts once
+    // practice hours are already fully accrued, so no practice days are ever scheduled
+    // after it (otherwise it would trigger purely on theory hours and could leave a
+    // few trailing practice-only days once weekly theory hours ran out).
+    const isPracticeDoneForFinalImmersion = data.totalPracticeHours <= 0 || loopPracticeHours >= data.totalPracticeHours;
+
+    const isFinalImmersionPhase =
+        !isInitialImmersionPhase &&
         loopTheoryHours < data.totalTheoryHours &&
-        theoryHoursRemaining <= hoursForFinalImmersion;
+        theoryHoursRemaining <= hoursForFinalImmersion &&
+        isPracticeDoneForFinalImmersion;
 
     if (isInitialImmersionPhase) {
         scheduledType = 'THEORY';
