@@ -1,0 +1,5 @@
+{
+  "name": "Gerador de Calendário de Aprendizagem 2.0",
+  "description": "Ferramenta para cálculo e geração de calendário de aprendizagem profissional (Teórico/Prático) com exportação em PDF.",
+  "requestFramePermissions": []
+}
