@@ -38,7 +38,7 @@ export const generatePDF = (data: AppFormData, result: CalculationResult) => {
   // --- Header ---
   const logoW = 60;
   const logoH = 15; 
-  if (data.entity === EntityType.INSTITUTO_LEAPY) {
+  if (data.entity === EntityType.INSTITUTO_LEAPY_FREGUESIA || data.entity === EntityType.INSTITUTO_LEAPY_LIBERDADE) {
     drawInstitutoLeapyLogo(doc, MARGIN, currentY, logoW, logoH);
   } else {
     drawLeapyOPGLogo(doc, MARGIN, currentY, logoW, logoH);
@@ -129,7 +129,8 @@ export const generatePDF = (data: AppFormData, result: CalculationResult) => {
 
   // Row 4: Weekly Day
   const courseDayName = WEEK_DAYS.find(d => d.id === data.weeklyCourseDay)?.label || '';
-  const weeklyLabel = `${courseDayName} (${data.modalityWeekly === 'ONLINE' ? 'Remoto' : 'Presencial'})`;
+  const weeklyModalityLabel = data.modalityWeekly === 'ONLINE' ? 'Remoto' : data.modalityWeekly === 'HYBRID' ? 'Híbrido' : 'Presencial';
+  const weeklyLabel = `${courseDayName} (${weeklyModalityLabel})`;
   
   drawInfoCell(MARGIN, currentY, col1W, 'Dia de Curso:', true);
   drawInfoCell(MARGIN + col1W, currentY, col2W, weeklyLabel, false);
@@ -151,7 +152,7 @@ export const generatePDF = (data: AppFormData, result: CalculationResult) => {
     doc.text(label, x + legendSize + 2, y + 3);
   };
 
-  const theoryMod = data.modalityWeekly === 'ONLINE' ? 'Remoto' : 'Presencial';
+  const theoryMod = weeklyModalityLabel;
   const immersionMod = data.modalityInitial === 'ONLINE' ? 'Remoto' : 'Presencial';
 
   drawLegendItem(colLegend1, currentY, COLORS.IMMERSION, `Atividade Teórica - Imersão (${immersionMod})`);

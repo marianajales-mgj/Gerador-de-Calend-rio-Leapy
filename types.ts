@@ -1,6 +1,8 @@
 export enum EntityType {
-  LEAPY_OPG = 'Leapy OPG',
-  INSTITUTO_LEAPY = 'Instituto Leapy',
+  LEAPY_FREGUESIA = 'LEAPY (Freguesia)',
+  LEAPY_LIBERDADE = 'Leapy (Liberdade)',
+  INSTITUTO_LEAPY_FREGUESIA = 'INSTITUTO LEAPY (Freguesia)',
+  INSTITUTO_LEAPY_LIBERDADE = 'INSTITUTO LEAPY (Liberdade)',
 }
 
 export enum DayType {
@@ -15,7 +17,27 @@ export enum DayType {
 }
 
 export type Modality = 'PRESENTIAL' | 'ONLINE';
+// Weekly course modality also accepts 'HYBRID'. Initial/Final immersion stay PRESENTIAL/ONLINE only.
+export type WeeklyModality = Modality | 'HYBRID';
 export type ImpactType = 'NO_IMPACT' | 'IMPACT';
+
+export interface EntidadeCursoConfig {
+  entidade: EntityType;
+  curso: string;
+  cbo: string;
+  protocolo: string;
+  totalTheoryHours: number;
+  totalPracticeHours: number;
+  immersionModalityInitial: Modality;
+  immersionModalityFinal: Modality;
+  immersionDays: number;
+  immersionDaysEnd: number;
+  entityName: string; // Razão Social
+  entityCnpj: string;
+  courseAddress: string;
+  uf: string;
+  city: string;
+}
 
 export interface Holiday {
   date: string; // ISO format YYYY-MM-DD
@@ -42,7 +64,7 @@ export interface AppFormData {
   modalityFinal: Modality;
   
   weeklyCourseDay: number; // 1 = Monday, 5 = Friday
-  modalityWeekly: Modality;
+  modalityWeekly: WeeklyModality;
 
   totalTheoryHours: number;
   totalPracticeHours: number;
@@ -80,7 +102,7 @@ export interface CalendarDay {
   isStart?: boolean;
   isEnd?: boolean;
   description?: string;
-  modality?: Modality; // New
+  modality?: WeeklyModality; // New
 }
 
 export interface HolidayReportItem {

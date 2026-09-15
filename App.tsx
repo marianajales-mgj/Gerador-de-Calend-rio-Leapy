@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Calendar, FileDown, Building2, 
+import {
+  Calendar, FileDown, Building2,
   Clock, MapPin, AlertCircle, Calculator, Info,
-  CheckSquare, Square, Laptop, Users, Table, X
+  CheckSquare, Square, Laptop, Users, Blend, Table, X
 } from 'lucide-react';
-import { AppFormData, CalculationResult, EntityType, Modality, DayType } from './types';
-import { WEEK_DAYS, BRAZIL_STATES, CITIES_BY_STATE } from './constants';
+import { AppFormData, CalculationResult, EntityType, Modality, WeeklyModality, DayType, EntidadeCursoConfig } from './types';
+import { WEEK_DAYS, BRAZIL_STATES, CITIES_BY_STATE, ENTIDADE_CURSO_CONFIG } from './constants';
 import { calculateCalendar } from './services/calculator';
 import { generatePDF } from './services/pdfGenerator';
 import { generateExcel } from './services/excelGenerator';
@@ -13,26 +13,48 @@ import { format, getDay, differenceInCalendarDays } from 'date-fns';
 import { getPotentialHolidays } from './utils/dateUtils';
 import { ptBR } from 'date-fns/locale';
 
+// Applies a matched Entidade+Curso config row onto the form data.
+// Fields set here remain manually editable afterwards.
+const applyEntidadeCursoConfig = (data: AppFormData, config: EntidadeCursoConfig): AppFormData => ({
+  ...data,
+  courseName: config.curso,
+  cboNumber: config.cbo,
+  protocol: config.protocolo,
+  totalTheoryHours: config.totalTheoryHours,
+  totalPracticeHours: config.totalPracticeHours,
+  modalityInitial: config.immersionModalityInitial,
+  modalityFinal: config.immersionModalityFinal,
+  immersionDays: config.immersionDays,
+  immersionDaysEnd: config.immersionDaysEnd,
+  entityName: config.entityName,
+  entityCnpj: config.entityCnpj,
+  courseAddress: config.courseAddress,
+  state: config.uf,
+  city: config.city,
+});
+
+const DEFAULT_CONFIG = ENTIDADE_CURSO_CONFIG[0];
+
 const App: React.FC = () => {
   const [formData, setFormData] = useState<AppFormData>({
-    entity: EntityType.LEAPY_OPG,
-    courseName: 'Técnico em Administração',
-    cboNumber: '3513-05 Técnico em administração',
+    entity: DEFAULT_CONFIG.entidade,
+    courseName: DEFAULT_CONFIG.curso,
+    cboNumber: DEFAULT_CONFIG.cbo,
     startDate: '',
-    
-    immersionDays: 7,
-    modalityInitial: 'PRESENTIAL',
-    
-    immersionDaysEnd: 0,
-    modalityFinal: 'PRESENTIAL',
-    
+
+    immersionDays: DEFAULT_CONFIG.immersionDays,
+    modalityInitial: DEFAULT_CONFIG.immersionModalityInitial,
+
+    immersionDaysEnd: DEFAULT_CONFIG.immersionDaysEnd,
+    modalityFinal: DEFAULT_CONFIG.immersionModalityFinal,
+
     weeklyCourseDay: 1, // Monday
     modalityWeekly: 'PRESENTIAL',
-    
-    totalTheoryHours: 402,
-    totalPracticeHours: 1428,
-    city: 'São Paulo',
-    state: 'SP',
+
+    totalTheoryHours: DEFAULT_CONFIG.totalTheoryHours,
+    totalPracticeHours: DEFAULT_CONFIG.totalPracticeHours,
+    city: DEFAULT_CONFIG.city,
+    state: DEFAULT_CONFIG.uf,
     recessStart: '',
     recessEnd: '',
     recessImpact: 'NO_IMPACT',
@@ -42,12 +64,12 @@ const App: React.FC = () => {
     adhereBridgeHolidays: false,
     bridgeHolidayImpact: 'NO_IMPACT',
     extendTheory: false,
-    
-    protocol: '308820.6735588/2025',
-    entityCnpj: '15.027.454/0001-23',
-    entityName: 'LEAPY OPG FRG - EDUCACAO E TREINAMENTO LTDA',
-    courseAddress: 'Av. Itaberaba, 1296 - Freguesia do Ó, São Paulo - SP, 02734-000 (Van na estação Barra Funda)',
-    
+
+    protocol: DEFAULT_CONFIG.protocolo,
+    entityCnpj: DEFAULT_CONFIG.entityCnpj,
+    entityName: DEFAULT_CONFIG.entityName,
+    courseAddress: DEFAULT_CONFIG.courseAddress,
+
     excludedHolidays: [],
     overrides: {}
   });
@@ -95,6 +117,29 @@ const App: React.FC = () => {
       }
 
       return newData;
+    });
+  };
+
+  const coursesForEntity = useMemo(
+    () => ENTIDADE_CURSO_CONFIG.filter(c => c.entidade === formData.entity),
+    [formData.entity]
+  );
+
+  const handleEntityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newEntity = e.target.value as EntityType;
+    const firstConfig = ENTIDADE_CURSO_CONFIG.find(c => c.entidade === newEntity);
+    setFormData(prev => {
+      const newData = { ...prev, entity: newEntity };
+      return firstConfig ? applyEntidadeCursoConfig(newData, firstConfig) : newData;
+    });
+  };
+
+  const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newCourse = e.target.value;
+    const config = ENTIDADE_CURSO_CONFIG.find(c => c.entidade === formData.entity && c.curso === newCourse);
+    setFormData(prev => {
+      const newData = { ...prev, courseName: newCourse };
+      return config ? applyEntidadeCursoConfig(newData, config) : newData;
     });
   };
 
@@ -164,7 +209,7 @@ const App: React.FC = () => {
   
   const cities = CITIES_BY_STATE[formData.state] || [];
 
-  const ModalitySelector = ({ name, value, onChange }: { name: string, value: Modality, onChange: any }) => (
+  const ModalitySelector = ({ name, value, onChange, allowHybrid = false }: { name: string, value: WeeklyModality, onChange: any, allowHybrid?: boolean }) => (
     <div className="flex gap-2 mt-1">
       <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'PRESENTIAL' ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
         <input type="radio" name={name} value="PRESENTIAL" checked={value === 'PRESENTIAL'} onChange={onChange} className="hidden" />
@@ -174,6 +219,12 @@ const App: React.FC = () => {
         <input type="radio" name={name} value="ONLINE" checked={value === 'ONLINE'} onChange={onChange} className="hidden" />
         <Laptop size={12} /> Online
       </label>
+      {allowHybrid && (
+        <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'HYBRID' ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
+          <input type="radio" name={name} value="HYBRID" checked={value === 'HYBRID'} onChange={onChange} className="hidden" />
+          <Blend size={12} /> Híbrido
+        </label>
+      )}
     </div>
   );
 
@@ -233,28 +284,31 @@ const App: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Entidade</label>
-                <select 
-                  name="entity" 
-                  value={formData.entity} 
-                  onChange={handleInputChange}
+                <select
+                  name="entity"
+                  value={formData.entity}
+                  onChange={handleEntityChange}
                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#373afd] focus:border-[#373afd] outline-none"
                 >
-                  <option value={EntityType.LEAPY_OPG}>Leapy OPG</option>
-                  <option value={EntityType.INSTITUTO_LEAPY}>Instituto Leapy</option>
+                  {Object.values(EntityType).map(ent => (
+                    <option key={ent} value={ent}>{ent}</option>
+                  ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Curso</label>
-                  <input 
-                    type="text" 
+                  <select
                     name="courseName"
                     value={formData.courseName}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg outline-none"
-                    placeholder="Ex: Auxiliar Adm"
-                  />
+                    onChange={handleCourseChange}
+                    className="w-full p-2 border border-slate-300 rounded-lg outline-none bg-white"
+                  >
+                    {coursesForEntity.map(c => (
+                      <option key={c.curso} value={c.curso}>{c.curso}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">CBO</label>
@@ -395,7 +449,7 @@ const App: React.FC = () => {
                         ))}
                       </select>
                     </div>
-                    <ModalitySelector name="modalityWeekly" value={formData.modalityWeekly} onChange={handleInputChange} />
+                    <ModalitySelector name="modalityWeekly" value={formData.modalityWeekly} onChange={handleInputChange} allowHybrid />
                  </div>
 
                  <hr className="border-slate-200" />
@@ -716,7 +770,10 @@ const App: React.FC = () => {
                    </div>
                    <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-sm bg-[#373afd]"></div>
-                      <span>Atividade Teórica - Semanal ({formData.modalityWeekly === 'PRESENTIAL' ? 'Presencial' : 'Online'})</span>
+                      <span>Atividade Teórica - Semanal ({
+                        formData.modalityWeekly === 'PRESENTIAL' ? 'Presencial' :
+                        formData.modalityWeekly === 'ONLINE' ? 'Online' : 'Híbrido'
+                      })</span>
                    </div>
                    <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-sm bg-[#FEF08A]"></div>
