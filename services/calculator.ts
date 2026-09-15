@@ -102,8 +102,23 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
         scheduledModality = data.modalityFinal;
     } else {
         if (weekday === data.weeklyCourseDay) {
-            scheduledType = 'THEORY';
-            scheduledModality = data.modalityWeekly;
+            // Weekly theory hours still owed after subtracting what immersion covers.
+            const weeklyTheoryTarget = Math.max(0, data.totalTheoryHours - initialImmersionHours - hoursForFinalImmersion);
+            const weeklyTheoryConsumed = Math.max(0, loopTheoryHours - initialImmersionHours);
+            const weeklyTheoryPending = weeklyTheoryTarget > 0 && weeklyTheoryConsumed < weeklyTheoryTarget;
+
+            // Spread the weekly theory day across the whole contract at the same pace as
+            // practice hours accumulate, instead of depleting all weekly theory hours as
+            // fast as possible and leaving a practice-only tail with no theoretical activity.
+            const theoryOnPace = data.totalPracticeHours <= 0 ||
+                (weeklyTheoryConsumed / weeklyTheoryTarget) <= (loopPracticeHours / data.totalPracticeHours);
+
+            if (weeklyTheoryPending && theoryOnPace) {
+                scheduledType = 'THEORY';
+                scheduledModality = data.modalityWeekly;
+            } else {
+                scheduledType = 'PRACTICE';
+            }
         } else {
             scheduledType = 'PRACTICE';
         }
