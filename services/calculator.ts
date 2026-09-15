@@ -170,9 +170,17 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
       // Valid Work Day
       if (scheduledType === 'THEORY') {
           if (!isLoopTheoryFull()) {
-              if (isRecessPeriod) {
+              if (isInitialImmersionPhase || isFinalImmersionPhase) {
+                  // Immersion is an intensive, pre-committed block: recess and bridge
+                  // holidays only interrupt the ongoing weekly routine, never immersion.
+                  dayType = DayType.IMMERSION;
+                  description = scheduledDesc;
+                  modality = scheduledModality;
+                  theoryHoursConsumed += HOURS_PER_DAY;
+                  loopTheoryHours += HOURS_PER_DAY;
+              } else if (isRecessPeriod) {
                   dayType = DayType.THEORY_RECESS;
-                  description = isFinalImmersionPhase ? 'Recesso (Imersão Final)' : 'Recesso Teórico';
+                  description = 'Recesso Teórico';
                   if (data.recessImpact === 'NO_IMPACT') {
                       theoryHoursConsumed += HOURS_PER_DAY;
                       loopTheoryHours += HOURS_PER_DAY;
@@ -181,7 +189,7 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
                   loopPracticeHours += HOURS_PER_DAY; // Recesso teórico geralmente implica prática na empresa
               } else if (isBridgeHoliday) {
                   dayType = DayType.THEORY_RECESS;
-                  description = isFinalImmersionPhase ? 'Emenda (Imersão Final)' : 'Emenda de Feriado';
+                  description = 'Emenda de Feriado';
                   if (data.bridgeHolidayImpact === 'NO_IMPACT') {
                       theoryHoursConsumed += HOURS_PER_DAY;
                       loopTheoryHours += HOURS_PER_DAY;
@@ -189,11 +197,7 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
                   practiceHoursConsumed += HOURS_PER_DAY;
                   loopPracticeHours += HOURS_PER_DAY;
               } else {
-                  if (isInitialImmersionPhase || isFinalImmersionPhase) {
-                      dayType = DayType.IMMERSION;
-                  } else {
-                      dayType = DayType.THEORY;
-                  }
+                  dayType = DayType.THEORY;
                   description = scheduledDesc;
                   modality = scheduledModality;
                   theoryHoursConsumed += HOURS_PER_DAY;
@@ -228,9 +232,10 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
   // Determine End Date
   let lastActivityIndex = -1;
   for (let i = calendar.length - 1; i >= 0; i--) {
-    if (calendar[i].dayType === DayType.THEORY || 
-        calendar[i].dayType === DayType.PRACTICE || 
-        calendar[i].dayType === DayType.THEORY_RECESS) {
+    if (calendar[i].dayType === DayType.THEORY ||
+        calendar[i].dayType === DayType.PRACTICE ||
+        calendar[i].dayType === DayType.THEORY_RECESS ||
+        calendar[i].dayType === DayType.IMMERSION) {
       lastActivityIndex = i;
       break;
     }
