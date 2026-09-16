@@ -18,6 +18,37 @@ const nthWeekdayFrom = (start: Date, n: number): Date => {
   }
 };
 
+// True for a day that doesn't count as immersion attendance: weekend, national/state/
+// municipal holiday, or (when the user adheres to bridge holidays) a Monday/Friday
+// bridging into an adjacent Tue/Thu holiday.
+const isNonAttendanceDay = (date: Date, data: AppFormData): boolean => {
+  if (isWeekend(date)) return true;
+  if (getHolidayInfo(date, data.city, data.state, data.excludedHolidays)) return true;
+  if (data.adhereBridgeHolidays) {
+    const weekday = getDay(date);
+    if (weekday === 1 && getHolidayInfo(addDays(date, 1), data.city, data.state, data.excludedHolidays)) return true;
+    if (weekday === 5 && getHolidayInfo(subDays(date, 1), data.city, data.state, data.excludedHolidays)) return true;
+  }
+  return false;
+};
+
+// Returns the date of the Nth actual attendance day counting from `start` (inclusive) -
+// weekends, holidays and bridge days are skipped, so the window EXTENDS to make up for
+// them instead of staying a fixed length. Used for a course whose immersion is a single
+// initial block only (no final immersion): the location is only reachable on real
+// business days, so a holiday inside must be made up with an extra day at the end.
+const nthAttendanceDayFrom = (start: Date, n: number, data: AppFormData): Date => {
+  let count = 0;
+  let d = start;
+  while (true) {
+    if (!isNonAttendanceDay(d, data)) {
+      count++;
+      if (count >= n) return d;
+    }
+    d = addDays(d, 1);
+  }
+};
+
 // Monday of the calendar week containing `d` (weeks run Mon-Sun).
 const mondayOfWeek = (d: Date): Date => {
   const day = getDay(d); // 0=Sun..6=Sat
@@ -308,10 +339,20 @@ const runSimulation = (
 export const calculateCalendar = (data: AppFormData): CalculationResult => {
   const startDate = startOfDay(parseISO(data.startDate));
 
-  // Immersion (initial and final) is a fixed span of `immersionDays`/`immersionDaysEnd`
-  // WEEKDAYS - holidays or bridge days landing inside never push it further.
+  // Two different immersion shapes, per course format:
+  // - Hybrid course (immersionDaysEnd > 0: initial + final Presencial immersion): both are
+  //   a FIXED span of weekdays - a holiday inside never pushes the window further.
+  // - Presencial-format course (immersionDaysEnd === 0: a single Online initial immersion
+  //   only): the window EXTENDS through holidays/emendas, since it needs that many actual
+  //   attendance days.
+  const isHybridImmersionShape = data.immersionDaysEnd > 0;
   const initialImmersionWindow: ImmersionWindow | null = data.immersionDays > 0
-    ? { start: startDate, end: nthWeekdayFrom(startDate, data.immersionDays) }
+    ? {
+        start: startDate,
+        end: isHybridImmersionShape
+          ? nthWeekdayFrom(startDate, data.immersionDays)
+          : nthAttendanceDayFrom(startDate, data.immersionDays, data),
+      }
     : null;
 
   let finalImmersionWindow: ImmersionWindow | null = null;
