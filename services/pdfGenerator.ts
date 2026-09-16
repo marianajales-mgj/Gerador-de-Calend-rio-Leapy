@@ -86,13 +86,9 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   // --- Header ---
   const isInstitutoLeapy = data.entity === EntityType.INSTITUTO_LEAPY_FREGUESIA || data.entity === EntityType.INSTITUTO_LEAPY_LIBERDADE;
   const accentColor = isInstitutoLeapy ? INSTITUTO_ACCENT : LEAPY_ACCENT;
-  // Text drawn on top of an accentColor fill (month header boxes, legend-details bar):
-  // dark purple on Leapy's light Mint fill, white on Instituto's dark Violet fill.
+  // Text drawn on top of an accentColor fill (month header boxes, section bars, legend
+  // bar): dark purple on Leapy's light Mint fill, white on Instituto's dark Violet fill.
   const accentTextColor = isInstitutoLeapy ? ([255, 255, 255] as [number, number, number]) : LEAPY_MINT_TEXT;
-  // Section bars: Leapy OPG swaps the neutral dark-gray bars for its Mint green, with
-  // dark purple text (better contrast on mint than white); Instituto keeps the neutral bar.
-  const sectionBarColor = isInstitutoLeapy ? ([50, 50, 50] as [number, number, number]) : LEAPY_MINT;
-  const sectionBarTextColor = isInstitutoLeapy ? ([255, 255, 255] as [number, number, number]) : LEAPY_MINT_TEXT;
   const logoH = isInstitutoLeapy ? 32 : 20;
   const logoDataUrl = await loadImageAsDataUrl(isInstitutoLeapy ? institutoLeapyLogoUrl : leapyLogoUrl);
   if (isInstitutoLeapy) {
@@ -344,9 +340,9 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     if(colIndex !== 0) currentY += MONTH_BOX_HEIGHT + 2;
   }
   
-  doc.setFillColor(...sectionBarColor);
+  doc.setFillColor(...accentColor);
   doc.rect(MARGIN, currentY, CONTENT_WIDTH, 8, 'F');
-  doc.setTextColor(...sectionBarTextColor);
+  doc.setTextColor(...accentTextColor);
   doc.setFontSize(10);
   doc.setFont('Montserrat', 'bold');
   doc.text('Fechamento / Resumo', MARGIN + 2, currentY + 5);
@@ -412,9 +408,9 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     currentY = MARGIN;
   }
   
-  doc.setFillColor(...sectionBarColor);
+  doc.setFillColor(...accentColor);
   doc.rect(MARGIN, currentY, CONTENT_WIDTH, 8, 'F');
-  doc.setTextColor(...sectionBarTextColor);
+  doc.setTextColor(...accentTextColor);
   doc.setFontSize(10);
   doc.setFont('Montserrat', 'bold');
   doc.text('Relatório de Datas Especiais', MARGIN + 2, currentY + 5);
