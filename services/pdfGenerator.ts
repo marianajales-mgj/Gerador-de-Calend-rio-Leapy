@@ -3,26 +3,37 @@ import { format, getDay, getDaysInMonth, startOfMonth, isSameDay } from 'date-fn
 import { ptBR } from 'date-fns/locale';
 import { AppFormData, CalculationResult, DayType, EntityType } from '../types';
 import { COLORS, PDF_CONFIG, WEEK_DAYS, LEGEND_DESCRIPTIONS } from '../constants';
+import leapyLogoUrl from '../assets/logo-leapy.png';
+import institutoLeapyLogoUrl from '../assets/logo-instituto-leapy.png';
 
-// Helper to draw Leapy OPG Logo (Orange Pill)
-const drawLeapyOPGLogo = (doc: jsPDF, x: number, y: number, w: number, h: number) => {
-  doc.setFillColor(249, 115, 22); // Orange #f97316
-  doc.roundedRect(x, y, w, h, h/2, h/2, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text('Leapy GO', x + (w/2), y + (h/1.5), { align: 'center' });
+// Real logo aspect ratios (width / height), so the PDF logo isn't stretched.
+const LEAPY_LOGO_ASPECT = 2554 / 1246;
+const INSTITUTO_LEAPY_LOGO_ASPECT = 1600 / 838;
+
+const loadImageAsDataUrl = async (url: string): Promise<string> => {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 };
 
-// Helper to draw Instituto Leapy Logo (Teal Text)
-const drawInstitutoLeapyLogo = (doc: jsPDF, x: number, y: number, w: number, h: number) => {
-  doc.setTextColor(53, 220, 178); // Teal #35dcb2
-  doc.setFont('helvetica', 'normal'); 
-  doc.setFontSize(18);
-  doc.text('INSTITUTO | Leapy', x + (w/2), y + (h/1.5), { align: 'center' });
+// Helper to draw the Leapy OPG logo image, height-constrained, aspect-preserved.
+const drawLeapyLogo = (doc: jsPDF, dataUrl: string, x: number, y: number, h: number) => {
+  const w = h * LEAPY_LOGO_ASPECT;
+  doc.addImage(dataUrl, 'PNG', x, y, w, h);
 };
 
-export const generatePDF = (data: AppFormData, result: CalculationResult) => {
+// Helper to draw the Instituto Leapy logo image, height-constrained, aspect-preserved.
+const drawInstitutoLeapyLogo = (doc: jsPDF, dataUrl: string, x: number, y: number, h: number) => {
+  const w = h * INSTITUTO_LEAPY_LOGO_ASPECT;
+  doc.addImage(dataUrl, 'PNG', x, y, w, h);
+};
+
+export const generatePDF = async (data: AppFormData, result: CalculationResult) => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -36,12 +47,13 @@ export const generatePDF = (data: AppFormData, result: CalculationResult) => {
   let currentY = MARGIN;
 
   // --- Header ---
-  const logoW = 60;
-  const logoH = 15; 
-  if (data.entity === EntityType.INSTITUTO_LEAPY_FREGUESIA || data.entity === EntityType.INSTITUTO_LEAPY_LIBERDADE) {
-    drawInstitutoLeapyLogo(doc, MARGIN, currentY, logoW, logoH);
+  const logoH = 12;
+  const isInstitutoLeapy = data.entity === EntityType.INSTITUTO_LEAPY_FREGUESIA || data.entity === EntityType.INSTITUTO_LEAPY_LIBERDADE;
+  const logoDataUrl = await loadImageAsDataUrl(isInstitutoLeapy ? institutoLeapyLogoUrl : leapyLogoUrl);
+  if (isInstitutoLeapy) {
+    drawInstitutoLeapyLogo(doc, logoDataUrl, MARGIN, currentY, logoH);
   } else {
-    drawLeapyOPGLogo(doc, MARGIN, currentY, logoW, logoH);
+    drawLeapyLogo(doc, logoDataUrl, MARGIN, currentY, logoH);
   }
 
   // Title Section

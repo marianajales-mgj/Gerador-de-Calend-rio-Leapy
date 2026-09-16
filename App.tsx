@@ -33,7 +33,7 @@ const applyEntidadeCursoConfig = (data: AppFormData, config: EntidadeCursoConfig
   city: config.city,
 });
 
-const DEFAULT_CONFIG = ENTIDADE_CURSO_CONFIG[0];
+const DEFAULT_CONFIG = ENTIDADE_CURSO_CONFIG.find(c => c.entidade === EntityType.INSTITUTO_LEAPY_LIBERDADE) || ENTIDADE_CURSO_CONFIG[0];
 
 const App: React.FC = () => {
   const [formData, setFormData] = useState<AppFormData>({
@@ -176,7 +176,10 @@ const App: React.FC = () => {
 
   const handleGeneratePDF = () => {
     if (result) {
-      generatePDF(formData, result);
+      generatePDF(formData, result).catch(err => {
+        console.error('Erro ao gerar PDF:', err);
+        alert('Ocorreu um erro ao gerar o PDF. Verifique o console para mais detalhes.');
+      });
     }
   };
 
