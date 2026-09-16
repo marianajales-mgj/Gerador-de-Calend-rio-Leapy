@@ -5,6 +5,9 @@ import { AppFormData, CalculationResult, DayType, EntityType } from '../types';
 import { COLORS, PDF_CONFIG, WEEK_DAYS, LEGEND_DESCRIPTIONS } from '../constants';
 import leapyLogoUrl from '../assets/logo-leapy.png';
 import institutoLeapyLogoUrl from '../assets/logo-instituto-leapy.png';
+import montserratRegularUrl from '../assets/fonts/Montserrat-Regular.ttf';
+import montserratBoldUrl from '../assets/fonts/Montserrat-Bold.ttf';
+import montserratItalicUrl from '../assets/fonts/Montserrat-Italic.ttf';
 
 // Real logo aspect ratios (width / height), so the PDF logo isn't stretched.
 const LEAPY_LOGO_ASPECT = 2554 / 1246;
@@ -15,6 +18,8 @@ const INSTITUTO_LEAPY_LOGO_ASPECT = 1600 / 838;
 // its own visual identity distinct from Leapy's Purple/Coral.
 const LEAPY_ACCENT: [number, number, number] = [29, 3, 40]; // #1d0328
 const INSTITUTO_ACCENT: [number, number, number] = [124, 58, 237]; // #7c3aed
+const LEAPY_MINT: [number, number, number] = [53, 220, 178]; // #35dcb2
+const LEAPY_MINT_TEXT: [number, number, number] = [29, 3, 40]; // dark purple reads better than white on mint
 
 const loadImageAsDataUrl = async (url: string): Promise<string> => {
   const response = await fetch(url);
@@ -25,6 +30,28 @@ const loadImageAsDataUrl = async (url: string): Promise<string> => {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
+};
+
+// Strips the "data:...;base64," prefix jsPDF's addFileToVFS doesn't want.
+const loadFontAsBase64 = async (url: string): Promise<string> => {
+  const dataUrl = await loadImageAsDataUrl(url);
+  return dataUrl.split(',')[1];
+};
+
+// Embeds Leapy's real brand font (Montserrat) into the PDF instead of jsPDF's default
+// Helvetica, so the document matches the design system used everywhere else.
+const registerMontserrat = async (doc: jsPDF): Promise<void> => {
+  const [regular, bold, italic] = await Promise.all([
+    loadFontAsBase64(montserratRegularUrl),
+    loadFontAsBase64(montserratBoldUrl),
+    loadFontAsBase64(montserratItalicUrl),
+  ]);
+  doc.addFileToVFS('Montserrat-Regular.ttf', regular);
+  doc.addFont('Montserrat-Regular.ttf', 'Montserrat', 'normal');
+  doc.addFileToVFS('Montserrat-Bold.ttf', bold);
+  doc.addFont('Montserrat-Bold.ttf', 'Montserrat', 'bold');
+  doc.addFileToVFS('Montserrat-Italic.ttf', italic);
+  doc.addFont('Montserrat-Italic.ttf', 'Montserrat', 'italic');
 };
 
 // Helper to draw the Leapy OPG logo image, height-constrained, aspect-preserved.
@@ -50,12 +77,19 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   const CONTENT_WIDTH = PAGE_WIDTH - (MARGIN * 2);
   const MONTH_WIDTH = (CONTENT_WIDTH - (COL_GAP * 2)) / 3;
 
+  await registerMontserrat(doc);
+  doc.setFont('Montserrat', 'normal');
+
   let currentY = MARGIN;
 
   // --- Header ---
-  const logoH = 20;
   const isInstitutoLeapy = data.entity === EntityType.INSTITUTO_LEAPY_FREGUESIA || data.entity === EntityType.INSTITUTO_LEAPY_LIBERDADE;
   const accentColor = isInstitutoLeapy ? INSTITUTO_ACCENT : LEAPY_ACCENT;
+  // Section bars: Leapy OPG swaps the neutral dark-gray bars for its Mint green, with
+  // dark purple text (better contrast on mint than white); Instituto keeps the neutral bar.
+  const sectionBarColor = isInstitutoLeapy ? ([50, 50, 50] as [number, number, number]) : LEAPY_MINT;
+  const sectionBarTextColor = isInstitutoLeapy ? ([255, 255, 255] as [number, number, number]) : LEAPY_MINT_TEXT;
+  const logoH = isInstitutoLeapy ? 32 : 20;
   const logoDataUrl = await loadImageAsDataUrl(isInstitutoLeapy ? institutoLeapyLogoUrl : leapyLogoUrl);
   if (isInstitutoLeapy) {
     drawInstitutoLeapyLogo(doc, logoDataUrl, MARGIN, currentY, logoH);
@@ -67,17 +101,17 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   const titleX = PAGE_WIDTH - MARGIN;
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Montserrat', 'normal');
   doc.text('Anexo I', titleX, currentY + 3, { align: 'right' });
-  
+
   doc.setFontSize(12);
   doc.setTextColor(...accentColor);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Montserrat', 'bold');
   doc.text('Calendário de Atividades Teóricas e Práticas', titleX, currentY + 8, { align: 'right' });
 
   doc.setFontSize(9);
   doc.setTextColor(80, 80, 80);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Montserrat', 'normal');
   doc.text('Parte Integrante do Contrato de Aprendizagem', titleX, currentY + 13, { align: 'right' });
 
   currentY += logoH + 4;
@@ -97,10 +131,10 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     if (isLabel) {
       doc.setFillColor(240, 240, 240);
       doc.rect(x, y, w, rowHeight, 'F');
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('Montserrat', 'bold');
       doc.setTextColor(50, 50, 50);
     } else {
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('Montserrat', 'normal');
       doc.setTextColor(0, 0, 0);
     }
     doc.rect(x, y, w, rowHeight);
@@ -109,7 +143,12 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
 
   // Row 1: Course
   drawInfoCell(MARGIN, currentY, col1W, 'Curso:', true);
-  drawInfoCell(MARGIN + col1W, currentY, CONTENT_WIDTH - col1W, `${data.courseName} - CBO nº ${data.cboNumber}`, false);
+  drawInfoCell(MARGIN + col1W, currentY, CONTENT_WIDTH - col1W, data.courseName, false);
+  currentY += rowHeight;
+
+  // Row 1.1: CBO (own row - some CBO descriptions are long enough to get cut off sharing a row with Curso)
+  drawInfoCell(MARGIN, currentY, col1W, 'CBO:', true);
+  drawInfoCell(MARGIN + col1W, currentY, CONTENT_WIDTH - col1W, data.cboNumber, false);
   currentY += rowHeight;
 
   // Row 1.5: Protocol & CNPJ
@@ -205,7 +244,7 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     doc.rect(xPos, currentY, MONTH_WIDTH, 6, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('Montserrat', 'bold');
     doc.text(format(monthDate, 'MMMM yyyy', { locale: ptBR }).toUpperCase(), xPos + (MONTH_WIDTH / 2), currentY + 4, { align: 'center' });
 
     // Week Header
@@ -215,7 +254,7 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(6);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('Montserrat', 'normal');
     
     ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].forEach((d, i) => {
       doc.setFillColor(240, 240, 240);
@@ -301,11 +340,11 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     if(colIndex !== 0) currentY += MONTH_BOX_HEIGHT + 2;
   }
   
-  doc.setFillColor(50, 50, 50);
+  doc.setFillColor(...sectionBarColor);
   doc.rect(MARGIN, currentY, CONTENT_WIDTH, 8, 'F');
-  doc.setTextColor(255,255,255);
+  doc.setTextColor(...sectionBarTextColor);
   doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Montserrat', 'bold');
   doc.text('Fechamento / Resumo', MARGIN + 2, currentY + 5);
   currentY += 8;
   
@@ -333,9 +372,9 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     if (isTotal) {
       doc.setFillColor(240, 240, 240);
       doc.rect(MARGIN, currentY, CONTENT_WIDTH, tableRowH, 'F');
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('Montserrat', 'bold');
     } else {
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('Montserrat', 'normal');
     }
     
     doc.text(label, col1 + 2, currentY + 5);
@@ -355,7 +394,7 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   currentY += 8;
 
   // --- Disclaimer ---
-  doc.setFont('helvetica', 'italic');
+  doc.setFont('Montserrat', 'italic');
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
   const disclaimerText = "O calendário segue as orientações do MTE e do curso aprovado.";
@@ -369,11 +408,11 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     currentY = MARGIN;
   }
   
-  doc.setFillColor(50, 50, 50);
+  doc.setFillColor(...sectionBarColor);
   doc.rect(MARGIN, currentY, CONTENT_WIDTH, 8, 'F');
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(...sectionBarTextColor);
   doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Montserrat', 'bold');
   doc.text('Relatório de Datas Especiais', MARGIN + 2, currentY + 5);
   currentY += 8;
 
@@ -386,7 +425,7 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   doc.text('Tipo', MARGIN + 140, currentY + 4);
   currentY += 6;
 
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Montserrat', 'normal');
   result.holidayReport.forEach((item, idx) => {
     if (currentY > PAGE_HEIGHT - MARGIN - 5) {
       doc.addPage();
@@ -419,7 +458,7 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   doc.rect(MARGIN, currentY, CONTENT_WIDTH, 10, 'F');
   doc.setTextColor(255,255,255);
   doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Montserrat', 'bold');
   doc.text('Descrição Detalhada das Legendas', MARGIN + 4, currentY + 6.5);
   currentY += 15;
 
@@ -432,11 +471,11 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
      doc.rect(MARGIN, currentY, 6, 25, 'F'); 
      
      doc.setTextColor(0,0,0);
-     doc.setFont('helvetica', 'bold');
+     doc.setFont('Montserrat', 'bold');
      doc.setFontSize(10);
      doc.text(title, MARGIN + 10, currentY + 6);
      
-     doc.setFont('helvetica', 'normal');
+     doc.setFont('Montserrat', 'normal');
      doc.setFontSize(9);
      doc.setTextColor(60, 60, 60);
      const splitDesc = doc.splitTextToSize(description, CONTENT_WIDTH - 20);

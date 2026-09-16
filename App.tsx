@@ -13,6 +13,12 @@ import { format, getDay, differenceInCalendarDays } from 'date-fns';
 import { getPotentialHolidays } from './utils/dateUtils';
 import { ptBR } from 'date-fns/locale';
 
+// A course whose immersion runs Presencial is Leapy's "hybrid" course pattern (Imersão
+// Inicial Presencial + Curso Semanal Híbrido + Imersão Final Presencial) - so its weekly
+// modality defaults to Híbrido; other courses (EAD immersion) default to Presencial.
+const defaultWeeklyModalityFor = (config: EntidadeCursoConfig): WeeklyModality =>
+  config.immersionModalityInitial === 'PRESENTIAL' ? 'HYBRID' : 'PRESENTIAL';
+
 // Applies a matched Entidade+Curso config row onto the form data.
 // Fields set here remain manually editable afterwards.
 const applyEntidadeCursoConfig = (data: AppFormData, config: EntidadeCursoConfig): AppFormData => ({
@@ -24,6 +30,7 @@ const applyEntidadeCursoConfig = (data: AppFormData, config: EntidadeCursoConfig
   totalPracticeHours: config.totalPracticeHours,
   modalityInitial: config.immersionModalityInitial,
   modalityFinal: config.immersionModalityFinal,
+  modalityWeekly: defaultWeeklyModalityFor(config),
   immersionDays: config.immersionDays,
   immersionDaysEnd: config.immersionDaysEnd,
   entityName: config.entityName,
@@ -49,7 +56,7 @@ const App: React.FC = () => {
     modalityFinal: DEFAULT_CONFIG.immersionModalityFinal,
 
     weeklyCourseDay: 1, // Monday
-    modalityWeekly: 'PRESENTIAL',
+    modalityWeekly: defaultWeeklyModalityFor(DEFAULT_CONFIG),
 
     totalTheoryHours: DEFAULT_CONFIG.totalTheoryHours,
     totalPracticeHours: DEFAULT_CONFIG.totalPracticeHours,
@@ -59,9 +66,9 @@ const App: React.FC = () => {
     recessEnd: '',
     recessImpact: 'NO_IMPACT',
 
-    holidayImpact: 'IMPACT', // Default: Holidays impact (reduce) workload, requiring makeup or resulting in deficit
+    holidayImpact: 'NO_IMPACT',
 
-    adhereBridgeHolidays: false,
+    adhereBridgeHolidays: true,
     bridgeHolidayImpact: 'NO_IMPACT',
     extendTheory: false,
 
