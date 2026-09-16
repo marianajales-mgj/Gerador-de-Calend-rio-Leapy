@@ -33,6 +33,13 @@ const loadImageAsDataUrl = async (url: string): Promise<string> => {
   });
 };
 
+// Removes characters that are invalid in a filename on Windows/macOS ( / \ : * ? " < > | ),
+// keeping everything else (accents, spaces, parentheses) readable as-is.
+const sanitizeFilename = (s: string) => s.replace(/[/\\:*?"<>|\x00-\x1F]/g, '').replace(/\s+/g, ' ').trim();
+
+// "LEAPY (Freguesia)" -> "LEAPY FREGUESIA" - uppercase, no parentheses, for filenames.
+const entityFilenameLabel = (entity: string) => entity.toUpperCase().replace(/[()]/g, '').replace(/\s+/g, ' ').trim();
+
 // Strips the "data:...;base64," prefix jsPDF's addFileToVFS doesn't want.
 const loadFontAsBase64 = async (url: string): Promise<string> => {
   const dataUrl = await loadImageAsDataUrl(url);
@@ -509,6 +516,8 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   drawDescriptionBlock(COLORS.HOLIDAY, 'Feriados', LEGEND_DESCRIPTIONS.HOLIDAY);
 
   const filenameDate = format(new Date(data.startDate + 'T00:00:00'), 'dd-MM-yyyy');
-  const sanitizedCourse = data.courseName.replace(/[^a-z0-9]/gi, '_').substring(0, 30);
-  doc.save(`Calendario_Aprendizagem_-_${filenameDate}_-_${sanitizedCourse}.pdf`);
+  const filename = sanitizeFilename(
+    `Calendario Aprendizagem - ${data.courseName} - ${entityFilenameLabel(data.entity)} - Entrada ${filenameDate} - Dia de curso ${courseDayName}.pdf`
+  );
+  doc.save(filename);
 };

@@ -2,10 +2,15 @@ import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AppFormData, CalculationResult, DayType } from '../types';
+import { WEEK_DAYS } from '../constants';
 
 const DATE_FORMAT = 'dd/mm/yyyy';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Removes characters that are invalid in a filename on Windows/macOS ( / \ : * ? " < > | ),
+// keeping everything else (accents, spaces) readable as-is.
+const sanitizeFilename = (s: string) => s.replace(/[/\\:*?"<>|\x00-\x1F]/g, '').replace(/\s+/g, ' ').trim();
 
 // SheetJS serializes Date objects using their raw UTC instant, ignoring the local
 // timezone the wall-clock date was built in - so a local midnight in a negative UTC
@@ -80,10 +85,11 @@ export const generateExcel = (data: AppFormData, result: CalculationResult) => {
 
     // Export
     const filenameDate = format(new Date(data.startDate + 'T00:00:00'), 'dd-MM-yyyy');
-    const sanitizedCourse = data.courseName.replace(/[^a-z0-9]/gi, '_').substring(0, 30);
+    const courseDayName = WEEK_DAYS.find(d => d.id === data.weeklyCourseDay)?.label || '';
+    const filename = sanitizeFilename(`Plano de aula - ${filenameDate} - ${courseDayName}.xlsx`);
 
     // Trigger download
-    XLSX.writeFile(wb, `Plano_de_Aula_-_${filenameDate}_-_${sanitizedCourse}.xlsx`);
+    XLSX.writeFile(wb, filename);
   } catch (error) {
     console.error("Erro ao gerar Excel:", error);
     alert("Ocorreu um erro ao gerar o arquivo Excel. Verifique o console para mais detalhes.");
