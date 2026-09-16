@@ -214,16 +214,16 @@ const App: React.FC = () => {
 
   const ModalitySelector = ({ name, value, onChange, allowHybrid = false }: { name: string, value: WeeklyModality, onChange: any, allowHybrid?: boolean }) => (
     <div className="flex gap-2 mt-1">
-      <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'PRESENTIAL' ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
+      <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'PRESENTIAL' ? 'bg-[#1d0328]/5 border-[#1d0328]/30 text-[#1d0328] font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
         <input type="radio" name={name} value="PRESENTIAL" checked={value === 'PRESENTIAL'} onChange={onChange} className="hidden" />
         <Users size={12} /> Presencial
       </label>
-      <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'ONLINE' ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
+      <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'ONLINE' ? 'bg-[#1d0328]/5 border-[#1d0328]/30 text-[#1d0328] font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
         <input type="radio" name={name} value="ONLINE" checked={value === 'ONLINE'} onChange={onChange} className="hidden" />
         <Laptop size={12} /> Online
       </label>
       {allowHybrid && (
-        <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'HYBRID' ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
+        <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'HYBRID' ? 'bg-[#1d0328]/5 border-[#1d0328]/30 text-[#1d0328] font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
           <input type="radio" name={name} value="HYBRID" checked={value === 'HYBRID'} onChange={onChange} className="hidden" />
           <Blend size={12} /> Híbrido
         </label>
@@ -235,36 +235,36 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-100 p-4 md:p-8 flex flex-col items-center font-sans">
       <header className="w-full max-w-7xl mb-8 flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-3 mb-4 md:mb-0">
-          <div className="p-3 bg-[#373afd] rounded-lg text-white">
+          <div className="p-3 bg-[#1d0328] rounded-lg text-white">
             <Calendar size={28} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Gerador de Calendário</h1>
-            <p className="text-slate-500 text-sm">Aprendizagem Profissional • Teoria & Prática</p>
+            <h1 className="font-display text-2xl text-[#1d0328]">Gerador de Calendário</h1>
+            <p className="text-[#fc5959] text-xs font-bold uppercase tracking-wider">Aprendizagem Profissional • Teoria & Prática</p>
           </div>
         </div>
         {result && (
           <div className="flex flex-col sm:flex-row gap-3">
-            <button 
+            <button
               onClick={handleGenerateExcel}
               disabled={!isFormValid}
               title={!isFormValid ? "Preencha todos os campos obrigatórios" : "Baixar Plano de Aula em Excel"}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors shadow-lg ${
-                isFormValid 
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/10' 
+                isFormValid
+                  ? 'bg-[#35dcb2] hover:bg-[#2bc39c] text-[#1d0328] shadow-[#1d0328]/10'
                   : 'bg-slate-300 text-slate-500 cursor-not-allowed'
               }`}
             >
               <Table size={20} />
               Baixar XLS
             </button>
-            <button 
+            <button
               onClick={handleGeneratePDF}
               disabled={!isFormValid}
               title={!isFormValid ? "Preencha todos os campos obrigatórios, incluindo o recesso" : "Baixar Calendário PDF"}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors shadow-lg ${
-                isFormValid 
-                  ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10' 
+                isFormValid
+                  ? 'bg-[#1d0328] hover:bg-[#2d0a3d] text-white shadow-[#1d0328]/10'
                   : 'bg-slate-300 text-slate-500 cursor-not-allowed'
               }`}
             >
@@ -280,7 +280,7 @@ const App: React.FC = () => {
         <section className="lg:col-span-4 space-y-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <Building2 size={20} className="text-[#373afd]" /> 
+              <Building2 size={20} className="text-[#1d0328]" />
               Dados Gerais
             </h2>
             
@@ -291,7 +291,7 @@ const App: React.FC = () => {
                   name="entity"
                   value={formData.entity}
                   onChange={handleEntityChange}
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#373afd] focus:border-[#373afd] outline-none"
+                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1d0328] focus:border-[#1d0328] outline-none"
                 >
                   {Object.values(EntityType).map(ent => (
                     <option key={ent} value={ent}>{ent}</option>
@@ -379,7 +379,7 @@ const App: React.FC = () => {
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <Clock size={20} className="text-[#373afd]" /> 
+              <Clock size={20} className="text-[#1d0328]" />
               Cargas e Prazos
             </h2>
             
@@ -602,7 +602,7 @@ const App: React.FC = () => {
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <MapPin size={20} className="text-[#373afd]" /> 
+              <MapPin size={20} className="text-[#1d0328]" />
               Localização
             </h2>
             
@@ -660,7 +660,7 @@ const App: React.FC = () => {
                             className="text-slate-600 hover:text-slate-800 shrink-0"
                             title={isExcluded ? "Incluir feriado" : "Excluir feriado"}
                           >
-                            {isExcluded ? <Square size={16} /> : <CheckSquare size={16} className="text-[#373afd]" />}
+                            {isExcluded ? <Square size={16} /> : <CheckSquare size={16} className="text-[#1d0328]" />}
                           </button>
                           
                           <div className="flex-1">
@@ -728,7 +728,7 @@ const App: React.FC = () => {
                 {/* Fechamento / Resumo Table */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                    <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
-                     <Calculator size={18} className="text-[#373afd]" />
+                     <Calculator size={18} className="text-[#1d0328]" />
                      <h3 className="font-semibold text-slate-700">Resumo / Fechamento</h3>
                    </div>
                    <div className="overflow-x-auto">
@@ -827,7 +827,7 @@ const App: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Atividade</label>
                 <select 
-                  className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#373afd]"
+                  className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#1d0328]"
                   defaultValue={formData.overrides?.[editingDay.toISOString().split('T')[0]]?.type || 'DEFAULT'}
                   id="overrideType"
                 >
@@ -853,7 +853,7 @@ const App: React.FC = () => {
                     const type = (document.getElementById('overrideType') as HTMLSelectElement).value as DayType | 'DEFAULT';
                     handleSaveOverride(type);
                   }}
-                  className="flex-1 px-4 py-2 bg-[#373afd] text-white rounded-lg font-medium hover:bg-[#2d30d1] transition-colors"
+                  className="flex-1 px-4 py-2 bg-[#1d0328] text-white rounded-lg font-medium hover:bg-[#2d0a3d] transition-colors"
                 >
                   Salvar
                 </button>

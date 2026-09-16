@@ -10,6 +10,12 @@ import institutoLeapyLogoUrl from '../assets/logo-instituto-leapy.png';
 const LEAPY_LOGO_ASPECT = 2554 / 1246;
 const INSTITUTO_LEAPY_LOGO_ASPECT = 1600 / 838;
 
+// Brand accent per entity: Leapy OPG uses Leapy's own Purple (Salto v1.0 design
+// system); Instituto Leapy uses the violet from instituto.leapy.com.br, since it runs
+// its own visual identity distinct from Leapy's Purple/Coral.
+const LEAPY_ACCENT: [number, number, number] = [29, 3, 40]; // #1d0328
+const INSTITUTO_ACCENT: [number, number, number] = [124, 58, 237]; // #7c3aed
+
 const loadImageAsDataUrl = async (url: string): Promise<string> => {
   const response = await fetch(url);
   const blob = await response.blob();
@@ -47,8 +53,9 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   let currentY = MARGIN;
 
   // --- Header ---
-  const logoH = 12;
+  const logoH = 20;
   const isInstitutoLeapy = data.entity === EntityType.INSTITUTO_LEAPY_FREGUESIA || data.entity === EntityType.INSTITUTO_LEAPY_LIBERDADE;
+  const accentColor = isInstitutoLeapy ? INSTITUTO_ACCENT : LEAPY_ACCENT;
   const logoDataUrl = await loadImageAsDataUrl(isInstitutoLeapy ? institutoLeapyLogoUrl : leapyLogoUrl);
   if (isInstitutoLeapy) {
     drawInstitutoLeapyLogo(doc, logoDataUrl, MARGIN, currentY, logoH);
@@ -64,16 +71,16 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   doc.text('Anexo I', titleX, currentY + 3, { align: 'right' });
   
   doc.setFontSize(12);
-  doc.setTextColor(55, 58, 253); 
+  doc.setTextColor(...accentColor);
   doc.setFont('helvetica', 'bold');
   doc.text('Calendário de Atividades Teóricas e Práticas', titleX, currentY + 8, { align: 'right' });
-  
+
   doc.setFontSize(9);
   doc.setTextColor(80, 80, 80);
   doc.setFont('helvetica', 'normal');
   doc.text('Parte Integrante do Contrato de Aprendizagem', titleX, currentY + 13, { align: 'right' });
 
-  currentY += 20;
+  currentY += logoH + 4;
 
   // --- Info Grid (Refined for Modalities) ---
   doc.setDrawColor(200, 200, 200);
@@ -194,7 +201,7 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     const xPos = MARGIN + (colIndex * (MONTH_WIDTH + COL_GAP));
     
     // Month Header
-    doc.setFillColor(55, 58, 253); 
+    doc.setFillColor(...accentColor);
     doc.rect(xPos, currentY, MONTH_WIDTH, 6, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(9);
@@ -408,7 +415,7 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   doc.addPage();
   currentY = MARGIN;
 
-  doc.setFillColor(55, 58, 253);
+  doc.setFillColor(...accentColor);
   doc.rect(MARGIN, currentY, CONTENT_WIDTH, 10, 'F');
   doc.setTextColor(255,255,255);
   doc.setFontSize(12);
