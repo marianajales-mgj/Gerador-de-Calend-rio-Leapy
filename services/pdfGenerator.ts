@@ -127,15 +127,27 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   const col3W = 25; // Label
   const col4W = CONTENT_WIDTH - col1W - col2W - col3W; // Value
 
+  const INFO_FONT_SIZE = 9;
+  const INFO_MIN_FONT_SIZE = 6;
+
   const drawInfoCell = (x: number, y: number, w: number, text: string, isLabel: boolean) => {
     if (isLabel) {
       doc.setFillColor(240, 240, 240);
       doc.rect(x, y, w, rowHeight, 'F');
       doc.setFont('Montserrat', 'bold');
       doc.setTextColor(50, 50, 50);
+      doc.setFontSize(INFO_FONT_SIZE);
     } else {
       doc.setFont('Montserrat', 'normal');
       doc.setTextColor(0, 0, 0);
+      // Shrink the font just enough for long values (e.g. Endereço) to fit on one line.
+      let fontSize = INFO_FONT_SIZE;
+      doc.setFontSize(fontSize);
+      const maxTextWidth = w - 4;
+      while (fontSize > INFO_MIN_FONT_SIZE && doc.getTextWidth(text) > maxTextWidth) {
+        fontSize -= 0.5;
+        doc.setFontSize(fontSize);
+      }
     }
     doc.rect(x, y, w, rowHeight);
     doc.text(text, x + 2, y + 4.5);
