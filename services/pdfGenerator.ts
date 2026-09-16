@@ -13,13 +13,14 @@ import montserratItalicUrl from '../assets/fonts/Montserrat-Italic.ttf';
 const LEAPY_LOGO_ASPECT = 2554 / 1246;
 const INSTITUTO_LEAPY_LOGO_ASPECT = 1600 / 838;
 
-// Brand accent per entity: Leapy OPG uses Leapy's own Purple (Salto v1.0 design
-// system); Instituto Leapy uses the violet from instituto.leapy.com.br, since it runs
-// its own visual identity distinct from Leapy's Purple/Coral.
-const LEAPY_ACCENT: [number, number, number] = [29, 3, 40]; // #1d0328
-const INSTITUTO_ACCENT: [number, number, number] = [124, 58, 237]; // #7c3aed
+// Brand accent per entity: Leapy OPG uses its Mint green (title text and the month
+// header boxes - the near-black Purple read as plain "black" at this size, so Mint reads
+// as an actual brand color); Instituto Leapy uses the violet from instituto.leapy.com.br,
+// since it runs its own visual identity distinct from Leapy's Purple/Coral/Mint.
 const LEAPY_MINT: [number, number, number] = [53, 220, 178]; // #35dcb2
 const LEAPY_MINT_TEXT: [number, number, number] = [29, 3, 40]; // dark purple reads better than white on mint
+const LEAPY_ACCENT: [number, number, number] = LEAPY_MINT;
+const INSTITUTO_ACCENT: [number, number, number] = [124, 58, 237]; // #7c3aed
 
 const loadImageAsDataUrl = async (url: string): Promise<string> => {
   const response = await fetch(url);
@@ -85,6 +86,9 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
   // --- Header ---
   const isInstitutoLeapy = data.entity === EntityType.INSTITUTO_LEAPY_FREGUESIA || data.entity === EntityType.INSTITUTO_LEAPY_LIBERDADE;
   const accentColor = isInstitutoLeapy ? INSTITUTO_ACCENT : LEAPY_ACCENT;
+  // Text drawn on top of an accentColor fill (month header boxes, legend-details bar):
+  // dark purple on Leapy's light Mint fill, white on Instituto's dark Violet fill.
+  const accentTextColor = isInstitutoLeapy ? ([255, 255, 255] as [number, number, number]) : LEAPY_MINT_TEXT;
   // Section bars: Leapy OPG swaps the neutral dark-gray bars for its Mint green, with
   // dark purple text (better contrast on mint than white); Instituto keeps the neutral bar.
   const sectionBarColor = isInstitutoLeapy ? ([50, 50, 50] as [number, number, number]) : LEAPY_MINT;
@@ -242,7 +246,7 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     // Month Header
     doc.setFillColor(...accentColor);
     doc.rect(xPos, currentY, MONTH_WIDTH, 6, 'F');
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(...accentTextColor);
     doc.setFontSize(9);
     doc.setFont('Montserrat', 'bold');
     doc.text(format(monthDate, 'MMMM yyyy', { locale: ptBR }).toUpperCase(), xPos + (MONTH_WIDTH / 2), currentY + 4, { align: 'center' });
@@ -456,7 +460,7 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
 
   doc.setFillColor(...accentColor);
   doc.rect(MARGIN, currentY, CONTENT_WIDTH, 10, 'F');
-  doc.setTextColor(255,255,255);
+  doc.setTextColor(...accentTextColor);
   doc.setFontSize(12);
   doc.setFont('Montserrat', 'bold');
   doc.text('Descrição Detalhada das Legendas', MARGIN + 4, currentY + 6.5);

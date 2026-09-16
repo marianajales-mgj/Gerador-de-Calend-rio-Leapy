@@ -10,7 +10,7 @@ import { calculateCalendar } from './services/calculator';
 import { generatePDF } from './services/pdfGenerator';
 import { generateExcel } from './services/excelGenerator';
 import { format, getDay, differenceInCalendarDays } from 'date-fns';
-import { getPotentialHolidays } from './utils/dateUtils';
+import { getPotentialHolidays, getDefaultRecessWindow } from './utils/dateUtils';
 import { ptBR } from 'date-fns/locale';
 
 // A course whose immersion runs Presencial is Leapy's "hybrid" course pattern (Imersão
@@ -121,6 +121,15 @@ const App: React.FC = () => {
         } else {
           newData.city = '';
         }
+      }
+
+      // Recesso escolar: sempre as 3 últimas semanas de dezembro (seg a sex mais
+      // próxima do 1º dia útil de janeiro). Pré-preenchido ao definir a Data de
+      // Início, mas continua editável manualmente depois.
+      if (name === 'startDate' && value && !noRecess) {
+        const { start, end } = getDefaultRecessWindow(new Date(value + 'T00:00:00'));
+        newData.recessStart = start;
+        newData.recessEnd = end;
       }
 
       return newData;
