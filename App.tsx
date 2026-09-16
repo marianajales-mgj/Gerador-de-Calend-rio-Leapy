@@ -1,53 +1,82 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Calendar, FileDown, Building2, 
+import {
+  Calendar, FileDown, Building2,
   Clock, MapPin, AlertCircle, Calculator, Info,
-  CheckSquare, Square, Laptop, Users, Table, X
+  CheckSquare, Square, Laptop, Users, Blend, Table, X
 } from 'lucide-react';
-import { AppFormData, CalculationResult, EntityType, Modality, DayType } from './types';
-import { WEEK_DAYS, BRAZIL_STATES, CITIES_BY_STATE } from './constants';
+import { AppFormData, CalculationResult, EntityType, Modality, WeeklyModality, DayType, EntidadeCursoConfig } from './types';
+import { WEEK_DAYS, BRAZIL_STATES, CITIES_BY_STATE, ENTIDADE_CURSO_CONFIG } from './constants';
 import { calculateCalendar } from './services/calculator';
 import { generatePDF } from './services/pdfGenerator';
 import { generateExcel } from './services/excelGenerator';
 import { format, getDay, differenceInCalendarDays } from 'date-fns';
-import { getPotentialHolidays } from './utils/dateUtils';
+import { getPotentialHolidays, getDefaultRecessWindow } from './utils/dateUtils';
 import { ptBR } from 'date-fns/locale';
+
+// A course whose immersion runs Presencial is Leapy's "hybrid" course pattern (Imersão
+// Inicial Presencial + Curso Semanal Híbrido + Imersão Final Presencial) - so its weekly
+// modality defaults to Híbrido; other courses (EAD immersion) default to Presencial.
+const defaultWeeklyModalityFor = (config: EntidadeCursoConfig): WeeklyModality =>
+  config.immersionModalityInitial === 'PRESENTIAL' ? 'HYBRID' : 'PRESENTIAL';
+
+// Applies a matched Entidade+Curso config row onto the form data.
+// Fields set here remain manually editable afterwards.
+const applyEntidadeCursoConfig = (data: AppFormData, config: EntidadeCursoConfig): AppFormData => ({
+  ...data,
+  courseName: config.curso,
+  cboNumber: config.cbo,
+  protocol: config.protocolo,
+  totalTheoryHours: config.totalTheoryHours,
+  totalPracticeHours: config.totalPracticeHours,
+  modalityInitial: config.immersionModalityInitial,
+  modalityFinal: config.immersionModalityFinal,
+  modalityWeekly: defaultWeeklyModalityFor(config),
+  immersionDays: config.immersionDays,
+  immersionDaysEnd: config.immersionDaysEnd,
+  entityName: config.entityName,
+  entityCnpj: config.entityCnpj,
+  courseAddress: config.courseAddress,
+  state: config.uf,
+  city: config.city,
+});
+
+const DEFAULT_CONFIG = ENTIDADE_CURSO_CONFIG.find(c => c.entidade === EntityType.INSTITUTO_LEAPY_LIBERDADE) || ENTIDADE_CURSO_CONFIG[0];
 
 const App: React.FC = () => {
   const [formData, setFormData] = useState<AppFormData>({
-    entity: EntityType.LEAPY_OPG,
-    courseName: 'Técnico em Administração',
-    cboNumber: '3513-05 Técnico em administração',
+    entity: DEFAULT_CONFIG.entidade,
+    courseName: DEFAULT_CONFIG.curso,
+    cboNumber: DEFAULT_CONFIG.cbo,
     startDate: '',
-    
-    immersionDays: 7,
-    modalityInitial: 'PRESENTIAL',
-    
-    immersionDaysEnd: 0,
-    modalityFinal: 'PRESENTIAL',
-    
+
+    immersionDays: DEFAULT_CONFIG.immersionDays,
+    modalityInitial: DEFAULT_CONFIG.immersionModalityInitial,
+
+    immersionDaysEnd: DEFAULT_CONFIG.immersionDaysEnd,
+    modalityFinal: DEFAULT_CONFIG.immersionModalityFinal,
+
     weeklyCourseDay: 1, // Monday
-    modalityWeekly: 'PRESENTIAL',
-    
-    totalTheoryHours: 402,
-    totalPracticeHours: 1428,
-    city: 'São Paulo',
-    state: 'SP',
+    modalityWeekly: defaultWeeklyModalityFor(DEFAULT_CONFIG),
+
+    totalTheoryHours: DEFAULT_CONFIG.totalTheoryHours,
+    totalPracticeHours: DEFAULT_CONFIG.totalPracticeHours,
+    city: DEFAULT_CONFIG.city,
+    state: DEFAULT_CONFIG.uf,
     recessStart: '',
     recessEnd: '',
     recessImpact: 'NO_IMPACT',
 
-    holidayImpact: 'IMPACT', // Default: Holidays impact (reduce) workload, requiring makeup or resulting in deficit
+    holidayImpact: 'NO_IMPACT',
 
-    adhereBridgeHolidays: false,
+    adhereBridgeHolidays: true,
     bridgeHolidayImpact: 'NO_IMPACT',
     extendTheory: false,
-    
-    protocol: '308820.6735588/2025',
-    entityCnpj: '15.027.454/0001-23',
-    entityName: 'LEAPY OPG FRG - EDUCACAO E TREINAMENTO LTDA',
-    courseAddress: 'Av. Itaberaba, 1296 - Freguesia do Ó, São Paulo - SP, 02734-000 (Van na estação Barra Funda)',
-    
+
+    protocol: DEFAULT_CONFIG.protocolo,
+    entityCnpj: DEFAULT_CONFIG.entityCnpj,
+    entityName: DEFAULT_CONFIG.entityName,
+    courseAddress: DEFAULT_CONFIG.courseAddress,
+
     excludedHolidays: [],
     overrides: {}
   });
@@ -94,7 +123,39 @@ const App: React.FC = () => {
         }
       }
 
+      // Recesso escolar: sempre as 3 últimas semanas de dezembro (seg a sex mais
+      // próxima do 1º dia útil de janeiro). Pré-preenchido ao definir a Data de
+      // Início, mas continua editável manualmente depois.
+      if (name === 'startDate' && value && !noRecess) {
+        const { start, end } = getDefaultRecessWindow(new Date(value + 'T00:00:00'));
+        newData.recessStart = start;
+        newData.recessEnd = end;
+      }
+
       return newData;
+    });
+  };
+
+  const coursesForEntity = useMemo(
+    () => ENTIDADE_CURSO_CONFIG.filter(c => c.entidade === formData.entity),
+    [formData.entity]
+  );
+
+  const handleEntityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newEntity = e.target.value as EntityType;
+    const firstConfig = ENTIDADE_CURSO_CONFIG.find(c => c.entidade === newEntity);
+    setFormData(prev => {
+      const newData = { ...prev, entity: newEntity };
+      return firstConfig ? applyEntidadeCursoConfig(newData, firstConfig) : newData;
+    });
+  };
+
+  const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newCourse = e.target.value;
+    const config = ENTIDADE_CURSO_CONFIG.find(c => c.entidade === formData.entity && c.curso === newCourse);
+    setFormData(prev => {
+      const newData = { ...prev, courseName: newCourse };
+      return config ? applyEntidadeCursoConfig(newData, config) : newData;
     });
   };
 
@@ -131,7 +192,10 @@ const App: React.FC = () => {
 
   const handleGeneratePDF = () => {
     if (result) {
-      generatePDF(formData, result);
+      generatePDF(formData, result).catch(err => {
+        console.error('Erro ao gerar PDF:', err);
+        alert('Ocorreu um erro ao gerar o PDF. Verifique o console para mais detalhes.');
+      });
     }
   };
 
@@ -164,16 +228,22 @@ const App: React.FC = () => {
   
   const cities = CITIES_BY_STATE[formData.state] || [];
 
-  const ModalitySelector = ({ name, value, onChange }: { name: string, value: Modality, onChange: any }) => (
+  const ModalitySelector = ({ name, value, onChange, allowHybrid = false }: { name: string, value: WeeklyModality, onChange: any, allowHybrid?: boolean }) => (
     <div className="flex gap-2 mt-1">
-      <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'PRESENTIAL' ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
+      <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'PRESENTIAL' ? 'bg-[#1d0328]/5 border-[#1d0328]/30 text-[#1d0328] font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
         <input type="radio" name={name} value="PRESENTIAL" checked={value === 'PRESENTIAL'} onChange={onChange} className="hidden" />
         <Users size={12} /> Presencial
       </label>
-      <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'ONLINE' ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
+      <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'ONLINE' ? 'bg-[#1d0328]/5 border-[#1d0328]/30 text-[#1d0328] font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
         <input type="radio" name={name} value="ONLINE" checked={value === 'ONLINE'} onChange={onChange} className="hidden" />
         <Laptop size={12} /> Online
       </label>
+      {allowHybrid && (
+        <label className={`cursor-pointer px-2 py-1 rounded text-xs flex items-center gap-1 border ${value === 'HYBRID' ? 'bg-[#1d0328]/5 border-[#1d0328]/30 text-[#1d0328] font-medium' : 'bg-white border-slate-200 text-slate-500'}`}>
+          <input type="radio" name={name} value="HYBRID" checked={value === 'HYBRID'} onChange={onChange} className="hidden" />
+          <Blend size={12} /> Híbrido
+        </label>
+      )}
     </div>
   );
 
@@ -181,36 +251,36 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-100 p-4 md:p-8 flex flex-col items-center font-sans">
       <header className="w-full max-w-7xl mb-8 flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-3 mb-4 md:mb-0">
-          <div className="p-3 bg-[#373afd] rounded-lg text-white">
+          <div className="p-3 bg-[#1d0328] rounded-lg text-white">
             <Calendar size={28} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Gerador de Calendário</h1>
-            <p className="text-slate-500 text-sm">Aprendizagem Profissional • Teoria & Prática</p>
+            <h1 className="font-display text-2xl text-[#1d0328]">Gerador de Calendário</h1>
+            <p className="text-[#fc5959] text-xs font-bold uppercase tracking-wider">Aprendizagem Profissional • Teoria & Prática</p>
           </div>
         </div>
         {result && (
           <div className="flex flex-col sm:flex-row gap-3">
-            <button 
+            <button
               onClick={handleGenerateExcel}
               disabled={!isFormValid}
               title={!isFormValid ? "Preencha todos os campos obrigatórios" : "Baixar Plano de Aula em Excel"}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors shadow-lg ${
-                isFormValid 
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/10' 
+                isFormValid
+                  ? 'bg-[#35dcb2] hover:bg-[#2bc39c] text-[#1d0328] shadow-[#1d0328]/10'
                   : 'bg-slate-300 text-slate-500 cursor-not-allowed'
               }`}
             >
               <Table size={20} />
               Baixar XLS
             </button>
-            <button 
+            <button
               onClick={handleGeneratePDF}
               disabled={!isFormValid}
               title={!isFormValid ? "Preencha todos os campos obrigatórios, incluindo o recesso" : "Baixar Calendário PDF"}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors shadow-lg ${
-                isFormValid 
-                  ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10' 
+                isFormValid
+                  ? 'bg-[#1d0328] hover:bg-[#2d0a3d] text-white shadow-[#1d0328]/10'
                   : 'bg-slate-300 text-slate-500 cursor-not-allowed'
               }`}
             >
@@ -226,35 +296,38 @@ const App: React.FC = () => {
         <section className="lg:col-span-4 space-y-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <Building2 size={20} className="text-[#373afd]" /> 
+              <Building2 size={20} className="text-[#1d0328]" />
               Dados Gerais
             </h2>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Entidade</label>
-                <select 
-                  name="entity" 
-                  value={formData.entity} 
-                  onChange={handleInputChange}
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#373afd] focus:border-[#373afd] outline-none"
+                <select
+                  name="entity"
+                  value={formData.entity}
+                  onChange={handleEntityChange}
+                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#1d0328] focus:border-[#1d0328] outline-none"
                 >
-                  <option value={EntityType.LEAPY_OPG}>Leapy OPG</option>
-                  <option value={EntityType.INSTITUTO_LEAPY}>Instituto Leapy</option>
+                  {Object.values(EntityType).map(ent => (
+                    <option key={ent} value={ent}>{ent}</option>
+                  ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Curso</label>
-                  <input 
-                    type="text" 
+                  <select
                     name="courseName"
                     value={formData.courseName}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg outline-none"
-                    placeholder="Ex: Auxiliar Adm"
-                  />
+                    onChange={handleCourseChange}
+                    className="w-full p-2 border border-slate-300 rounded-lg outline-none bg-white"
+                  >
+                    {coursesForEntity.map(c => (
+                      <option key={c.curso} value={c.curso}>{c.curso}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">CBO</label>
@@ -322,7 +395,7 @@ const App: React.FC = () => {
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <Clock size={20} className="text-[#373afd]" /> 
+              <Clock size={20} className="text-[#1d0328]" />
               Cargas e Prazos
             </h2>
             
@@ -395,7 +468,7 @@ const App: React.FC = () => {
                         ))}
                       </select>
                     </div>
-                    <ModalitySelector name="modalityWeekly" value={formData.modalityWeekly} onChange={handleInputChange} />
+                    <ModalitySelector name="modalityWeekly" value={formData.modalityWeekly} onChange={handleInputChange} allowHybrid />
                  </div>
 
                  <hr className="border-slate-200" />
@@ -545,7 +618,7 @@ const App: React.FC = () => {
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <MapPin size={20} className="text-[#373afd]" /> 
+              <MapPin size={20} className="text-[#1d0328]" />
               Localização
             </h2>
             
@@ -603,7 +676,7 @@ const App: React.FC = () => {
                             className="text-slate-600 hover:text-slate-800 shrink-0"
                             title={isExcluded ? "Incluir feriado" : "Excluir feriado"}
                           >
-                            {isExcluded ? <Square size={16} /> : <CheckSquare size={16} className="text-[#373afd]" />}
+                            {isExcluded ? <Square size={16} /> : <CheckSquare size={16} className="text-[#1d0328]" />}
                           </button>
                           
                           <div className="flex-1">
@@ -671,7 +744,7 @@ const App: React.FC = () => {
                 {/* Fechamento / Resumo Table */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                    <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
-                     <Calculator size={18} className="text-[#373afd]" />
+                     <Calculator size={18} className="text-[#1d0328]" />
                      <h3 className="font-semibold text-slate-700">Resumo / Fechamento</h3>
                    </div>
                    <div className="overflow-x-auto">
@@ -716,7 +789,10 @@ const App: React.FC = () => {
                    </div>
                    <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-sm bg-[#373afd]"></div>
-                      <span>Atividade Teórica - Semanal ({formData.modalityWeekly === 'PRESENTIAL' ? 'Presencial' : 'Online'})</span>
+                      <span>Atividade Teórica - Semanal ({
+                        formData.modalityWeekly === 'PRESENTIAL' ? 'Presencial' :
+                        formData.modalityWeekly === 'ONLINE' ? 'Online' : 'Híbrido'
+                      })</span>
                    </div>
                    <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-sm bg-[#FEF08A]"></div>
@@ -767,7 +843,7 @@ const App: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Atividade</label>
                 <select 
-                  className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#373afd]"
+                  className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#1d0328]"
                   defaultValue={formData.overrides?.[editingDay.toISOString().split('T')[0]]?.type || 'DEFAULT'}
                   id="overrideType"
                 >
@@ -793,7 +869,7 @@ const App: React.FC = () => {
                     const type = (document.getElementById('overrideType') as HTMLSelectElement).value as DayType | 'DEFAULT';
                     handleSaveOverride(type);
                   }}
-                  className="flex-1 px-4 py-2 bg-[#373afd] text-white rounded-lg font-medium hover:bg-[#2d30d1] transition-colors"
+                  className="flex-1 px-4 py-2 bg-[#1d0328] text-white rounded-lg font-medium hover:bg-[#2d0a3d] transition-colors"
                 >
                   Salvar
                 </button>

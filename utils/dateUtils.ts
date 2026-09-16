@@ -1,5 +1,5 @@
 
-import { addDays, isSameDay, subDays, startOfYear, endOfYear, eachDayOfInterval, format } from 'date-fns';
+import { addDays, isSameDay, subDays, startOfYear, endOfYear, eachDayOfInterval, format, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // Calculate Easter date using Meeus/Jones/Butcher's algorithm
@@ -117,4 +117,30 @@ export const getPotentialHolidays = (startYear: number, endYear: number, city: s
     all = [...all, ...getHolidaysForYear(y, city, state)];
   }
   return all;
+};
+
+// School recess default: always the last 3 weeks of December, starting on a Monday and
+// ending on the Friday closest to the first weekday (Mon-Fri) of January the next year.
+export const getDefaultRecessWindow = (contractStartDate: Date): { start: string; end: string } => {
+  const recessYear = contractStartDate.getFullYear();
+
+  // First weekday (Mon-Fri) of January of the following year.
+  let firstWeekdayOfJan = new Date(recessYear + 1, 0, 1);
+  const janDow = getDay(firstWeekdayOfJan); // 0=Sun..6=Sat
+  if (janDow === 0) firstWeekdayOfJan = addDays(firstWeekdayOfJan, 1); // Sun -> Mon
+  else if (janDow === 6) firstWeekdayOfJan = addDays(firstWeekdayOfJan, 2); // Sat -> Mon
+
+  // Nearest Friday to that weekday - either the Friday of its own week, or the previous one.
+  const dow = getDay(firstWeekdayOfJan); // 1..5 (Mon..Fri)
+  const fridayThisWeek = addDays(firstWeekdayOfJan, 5 - dow);
+  const fridayPrevWeek = subDays(fridayThisWeek, 7);
+  const distThis = 5 - dow;
+  const distPrev = dow + 2;
+  const recessEnd = distThis <= distPrev ? fridayThisWeek : fridayPrevWeek;
+
+  // Start 3 full weeks earlier, on the Monday of that week.
+  const mondayOfEndWeek = subDays(recessEnd, getDay(recessEnd) - 1);
+  const recessStart = subDays(mondayOfEndWeek, 14);
+
+  return { start: format(recessStart, 'yyyy-MM-dd'), end: format(recessEnd, 'yyyy-MM-dd') };
 };
