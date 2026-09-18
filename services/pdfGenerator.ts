@@ -406,9 +406,9 @@ export const generatePDF = async (data: AppFormData, result: CalculationResult) 
     currentY += tableRowH;
   };
 
-  drawSummaryRow('Teóricas', result.totalDaysTheory, result.totalDaysTheory * 6, `${theoryPct}%`);
-  drawSummaryRow('Práticas', result.totalDaysPractice, result.totalDaysPractice * 6, `${practicePct}%`);
-  drawSummaryRow('Total', totalDays, totalDays * 6, '100%', true);
+  drawSummaryRow('Teóricas', result.totalDaysTheory, data.totalTheoryHours, `${theoryPct}%`);
+  drawSummaryRow('Práticas', result.totalDaysPractice, data.totalPracticeHours, `${practicePct}%`);
+  drawSummaryRow('Total', totalDays, data.totalTheoryHours + data.totalPracticeHours, '100%', true);
   
   currentY += 8;
 

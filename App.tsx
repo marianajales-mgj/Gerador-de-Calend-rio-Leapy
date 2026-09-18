@@ -761,19 +761,19 @@ const App: React.FC = () => {
                          <tr>
                            <td className="px-6 py-3 font-medium text-slate-700">Teóricas</td>
                            <td className="px-6 py-3">{result.totalDaysTheory}</td>
-                           <td className="px-6 py-3">{result.totalDaysTheory * 6}h</td>
+                           <td className="px-6 py-3">{formData.totalTheoryHours}h</td>
                            <td className="px-6 py-3 text-blue-600 font-medium">{theoryPct}%</td>
                          </tr>
                          <tr>
                            <td className="px-6 py-3 font-medium text-slate-700">Práticas</td>
                            <td className="px-6 py-3">{result.totalDaysPractice}</td>
-                           <td className="px-6 py-3">{result.totalDaysPractice * 6}h</td>
+                           <td className="px-6 py-3">{formData.totalPracticeHours}h</td>
                            <td className="px-6 py-3 text-amber-600 font-medium">{practicePct}%</td>
                          </tr>
                          <tr className="bg-slate-50 font-semibold text-slate-800">
                            <td className="px-6 py-3">Total</td>
                            <td className="px-6 py-3">{totalDays}</td>
-                           <td className="px-6 py-3">{totalDays * 6}h</td>
+                           <td className="px-6 py-3">{formData.totalTheoryHours + formData.totalPracticeHours}h</td>
                            <td className="px-6 py-3">100%</td>
                          </tr>
                        </tbody>
