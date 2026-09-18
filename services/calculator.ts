@@ -229,7 +229,7 @@ const runSimulation = (
         } else if (scheduledType === 'PRACTICE' && !isLoopPracticeFull()) {
           loopPracticeHours += HOURS_PER_DAY;
         }
-      } else if (holidayInfo && !isWknd && data.holidayImpact === 'NO_IMPACT') {
+      } else if (holidayInfo && !isWknd && !isInitialImmersionPhase && !isFinalImmersionPhase && data.holidayImpact === 'NO_IMPACT') {
         if (scheduledType === 'THEORY' && !isLoopTheoryFull()) {
           loopTheoryHours += HOURS_PER_DAY;
         }
@@ -244,7 +244,12 @@ const runSimulation = (
         type: holidayInfo.type
       });
 
-      if (!isWknd) {
+      // holidayImpact governs the ongoing weekly routine only. A holiday inside an
+      // Immersion window must never credit hours here - Immersion's own window sizing
+      // (extends for a Presencial-format course, stays fixed for a Híbrido one) is the
+      // only thing that determines its credited hours; crediting it again here would
+      // double-count the day the window already compensated for (or double-lose it).
+      if (!isWknd && !isInitialImmersionPhase && !isFinalImmersionPhase) {
          if (data.holidayImpact === 'NO_IMPACT') {
              if (scheduledType === 'THEORY' && !isLoopTheoryFull()) {
                  theoryHoursConsumed += HOURS_PER_DAY;
