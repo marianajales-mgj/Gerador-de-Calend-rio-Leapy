@@ -193,16 +193,24 @@ const runSimulation = (
         scheduledModality = data.modalityFinal;
     } else {
         if (weekday === data.weeklyCourseDay) {
-            // Weekly theory hours still owed after subtracting what immersion covers.
-            const weeklyTheoryTarget = Math.max(0, data.totalTheoryHours - initialImmersionHours - hoursForFinalImmersion);
-            const weeklyTheoryConsumed = Math.max(0, loopTheoryHours - initialImmersionHours);
-            const weeklyTheoryPending = weeklyTheoryTarget > 0 && weeklyTheoryConsumed < weeklyTheoryTarget;
+            // Nominal split (immersion's advertised size), used ONLY to pace/spread the
+            // weekly theory day evenly across the contract - not to decide when to stop.
+            const nominalWeeklyTarget = Math.max(0, data.totalTheoryHours - initialImmersionHours - hoursForFinalImmersion);
+            const nominalWeeklyConsumed = Math.max(0, loopTheoryHours - initialImmersionHours);
+
+            // Whether more weekly theory is actually still owed: based on hours truly
+            // credited so far (loopTheoryHours - e.g. less than nominal if a holiday was
+            // lost inside Immersion's fixed, non-extending window) plus what Final
+            // Immersion will still nominally contribute. This self-corrects for any
+            // Immersion shortfall by running the weekly phase a little longer, WITHOUT
+            // ever touching Immersion's own fixed date window.
+            const weeklyTheoryPending = (loopTheoryHours + hoursForFinalImmersion) < data.totalTheoryHours;
 
             // Spread the weekly theory day across the whole contract at the same pace as
             // practice hours accumulate, instead of depleting all weekly theory hours as
             // fast as possible and leaving a practice-only tail with no theoretical activity.
-            const theoryOnPace = data.totalPracticeHours <= 0 ||
-                (weeklyTheoryConsumed / weeklyTheoryTarget) <= (loopPracticeHours / data.totalPracticeHours);
+            const theoryOnPace = data.totalPracticeHours <= 0 || nominalWeeklyTarget <= 0 ||
+                (nominalWeeklyConsumed / nominalWeeklyTarget) <= (loopPracticeHours / data.totalPracticeHours);
 
             if (weeklyTheoryPending && theoryOnPace) {
                 scheduledType = 'THEORY';
@@ -283,8 +291,8 @@ const runSimulation = (
                   theoryHoursConsumed += HOURS_PER_DAY;
                   loopTheoryHours += HOURS_PER_DAY;
               }
-              practiceHoursConsumed += HOURS_PER_DAY;
-              loopPracticeHours += HOURS_PER_DAY; // Recesso teórico geralmente implica prática na empresa
+              if (!isLoopPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY; // Recesso teórico geralmente implica prática na empresa
+              loopPracticeHours += HOURS_PER_DAY;
           } else if (!isLoopTheoryFull() && isBridgeHoliday) {
               dayType = DayType.THEORY_RECESS;
               description = 'Emenda de Feriado';
@@ -292,7 +300,7 @@ const runSimulation = (
                   theoryHoursConsumed += HOURS_PER_DAY;
                   loopTheoryHours += HOURS_PER_DAY;
               }
-              practiceHoursConsumed += HOURS_PER_DAY;
+              if (!isLoopPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
               loopPracticeHours += HOURS_PER_DAY;
           } else if (!isLoopTheoryFull()) {
               dayType = DayType.THEORY;
@@ -300,16 +308,27 @@ const runSimulation = (
               modality = scheduledModality;
               theoryHoursConsumed += HOURS_PER_DAY;
               loopTheoryHours += HOURS_PER_DAY;
-          } else {
+          } else if (!isLoopPracticeFull()) {
               dayType = DayType.PRACTICE;
               description = 'Atividade Prática (Carga Teórica Finalizada)';
               practiceHoursConsumed += HOURS_PER_DAY;
               loopPracticeHours += HOURS_PER_DAY;
+          } else {
+              // Both official loads already met - this day isn't contractually required
+              // anymore, but the contract keeps running (e.g. waiting for a fixed
+              // Immersion window). Shown as blank rather than inflating either total.
+              dayType = DayType.EMPTY;
+              description = 'Carga Horária Completa';
+              loopPracticeHours += HOURS_PER_DAY;
           }
-      } else {
+      } else if (!isLoopPracticeFull()) {
           dayType = DayType.PRACTICE;
           description = scheduledDesc;
           practiceHoursConsumed += HOURS_PER_DAY;
+          loopPracticeHours += HOURS_PER_DAY;
+      } else {
+          dayType = DayType.EMPTY;
+          description = 'Carga Horária Completa';
           loopPracticeHours += HOURS_PER_DAY;
       }
     }
@@ -369,12 +388,16 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
     const estimate = runSimulation(data, startDate, initialImmersionWindow, null);
 
     if (estimate.finalImmersionStart) {
-      // Snap Final Immersion to start on a Monday - whichever is closer (this week's or
-      // next week's), extending or shortening the contract by a few days as needed - so
-      // the final `immersionDaysEnd` weekdays always land as clean Mon-Fri work weeks.
+      // Snap Final Immersion to start on a Monday - but only ever FORWARD, never earlier.
+      // estimate.finalImmersionStart is the earliest day where practice hours are already
+      // fully accrued; picking an earlier Monday would start Immersion (a fixed, non-
+      // extending block) before practice is done, permanently losing those hours since no
+      // days remain afterward to make them up. Moving later only ever adds slack, never
+      // takes hours away - so it's the safe direction whenever the natural date isn't
+      // already a Monday.
       const mondayThisWeek = mondayOfWeek(estimate.finalImmersionStart);
       const daysFromMonday = differenceInCalendarDays(estimate.finalImmersionStart, mondayThisWeek);
-      const targetMonday = daysFromMonday <= 3 ? mondayThisWeek : addDays(mondayThisWeek, 7);
+      const targetMonday = daysFromMonday === 0 ? mondayThisWeek : addDays(mondayThisWeek, 7);
 
       finalImmersionWindow = { start: targetMonday, end: nthWeekdayFrom(targetMonday, data.immersionDaysEnd) };
     }
