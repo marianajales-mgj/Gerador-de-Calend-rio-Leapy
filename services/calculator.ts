@@ -100,6 +100,9 @@ const runSimulation = (
 
   const isLoopTheoryFull = () => loopTheoryHours >= data.totalTheoryHours;
   const isLoopPracticeFull = () => loopPracticeHours >= data.totalPracticeHours;
+  // Gate the REAL (reported) hour counters specifically - once the official load is met,
+  // further days keep their natural type (never blank) but stop adding to the report.
+  const isPracticeFull = () => practiceHoursConsumed >= data.totalPracticeHours;
 
   const overrideDates = Object.keys(data.overrides || {}).map(d => parseISO(d));
   const lastOverrideDate = overrideDates.length > 0 ? new Date(Math.max(...overrideDates.map(d => d.getTime()))) : null;
@@ -291,7 +294,10 @@ const runSimulation = (
                   theoryHoursConsumed += HOURS_PER_DAY;
                   loopTheoryHours += HOURS_PER_DAY;
               }
-              if (!isLoopPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY; // Recesso teórico geralmente implica prática na empresa
+              // Recesso teórico geralmente implica prática na empresa - but never credit
+              // (report) practice hours past the official target, even though the day is
+              // still genuinely worked (never left blank).
+              if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
               loopPracticeHours += HOURS_PER_DAY;
           } else if (!isLoopTheoryFull() && isBridgeHoliday) {
               dayType = DayType.THEORY_RECESS;
@@ -300,7 +306,7 @@ const runSimulation = (
                   theoryHoursConsumed += HOURS_PER_DAY;
                   loopTheoryHours += HOURS_PER_DAY;
               }
-              if (!isLoopPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
+              if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
               loopPracticeHours += HOURS_PER_DAY;
           } else if (!isLoopTheoryFull()) {
               dayType = DayType.THEORY;
@@ -308,27 +314,21 @@ const runSimulation = (
               modality = scheduledModality;
               theoryHoursConsumed += HOURS_PER_DAY;
               loopTheoryHours += HOURS_PER_DAY;
-          } else if (!isLoopPracticeFull()) {
+          } else {
+              // Theory's official load is already met. The apprentice is still genuinely
+              // at the company this day (never shown as blank), but once practice's own
+              // official load is also already met, this day no longer adds to the
+              // reported real hours - it's calendar time spent waiting for the fixed
+              // Immersion window or the natural end date, not additional required load.
               dayType = DayType.PRACTICE;
               description = 'Atividade Prática (Carga Teórica Finalizada)';
-              practiceHoursConsumed += HOURS_PER_DAY;
-              loopPracticeHours += HOURS_PER_DAY;
-          } else {
-              // Both official loads already met - this day isn't contractually required
-              // anymore, but the contract keeps running (e.g. waiting for a fixed
-              // Immersion window). Shown as blank rather than inflating either total.
-              dayType = DayType.EMPTY;
-              description = 'Carga Horária Completa';
+              if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
               loopPracticeHours += HOURS_PER_DAY;
           }
-      } else if (!isLoopPracticeFull()) {
+      } else {
           dayType = DayType.PRACTICE;
           description = scheduledDesc;
-          practiceHoursConsumed += HOURS_PER_DAY;
-          loopPracticeHours += HOURS_PER_DAY;
-      } else {
-          dayType = DayType.EMPTY;
-          description = 'Carga Horária Completa';
+          if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
           loopPracticeHours += HOURS_PER_DAY;
       }
     }
