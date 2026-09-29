@@ -195,19 +195,24 @@ const runSimulation = (
         scheduledDesc = 'Imersão Final';
         scheduledModality = data.modalityFinal;
     } else {
+        // Whether more weekly theory is actually still owed: based on hours truly
+        // credited so far (loopTheoryHours - e.g. less than nominal if a holiday was
+        // lost inside Immersion's fixed, non-extending window) plus what Final
+        // Immersion will still nominally contribute. This self-corrects for any
+        // Immersion shortfall by running the weekly phase a little longer, WITHOUT
+        // ever touching Immersion's own fixed date window.
+        const weeklyTheoryPending = (loopTheoryHours + hoursForFinalImmersion) < data.totalTheoryHours;
+
+        // Once practice's real hours already meet the official target, any extra weekday
+        // (not just the designated one) genuinely closes the remaining theory gap instead
+        // of piling up unneeded "extra" practice days - the honest fix, not a hidden cap.
+        const practiceAlreadyDone = isPracticeFull();
+
         if (weekday === data.weeklyCourseDay) {
             // Nominal split (immersion's advertised size), used ONLY to pace/spread the
             // weekly theory day evenly across the contract - not to decide when to stop.
             const nominalWeeklyTarget = Math.max(0, data.totalTheoryHours - initialImmersionHours - hoursForFinalImmersion);
             const nominalWeeklyConsumed = Math.max(0, loopTheoryHours - initialImmersionHours);
-
-            // Whether more weekly theory is actually still owed: based on hours truly
-            // credited so far (loopTheoryHours - e.g. less than nominal if a holiday was
-            // lost inside Immersion's fixed, non-extending window) plus what Final
-            // Immersion will still nominally contribute. This self-corrects for any
-            // Immersion shortfall by running the weekly phase a little longer, WITHOUT
-            // ever touching Immersion's own fixed date window.
-            const weeklyTheoryPending = (loopTheoryHours + hoursForFinalImmersion) < data.totalTheoryHours;
 
             // Spread the weekly theory day across the whole contract at the same pace as
             // practice hours accumulate, instead of depleting all weekly theory hours as
@@ -215,12 +220,15 @@ const runSimulation = (
             const theoryOnPace = data.totalPracticeHours <= 0 || nominalWeeklyTarget <= 0 ||
                 (nominalWeeklyConsumed / nominalWeeklyTarget) <= (loopPracticeHours / data.totalPracticeHours);
 
-            if (weeklyTheoryPending && theoryOnPace) {
+            if (weeklyTheoryPending && (theoryOnPace || practiceAlreadyDone)) {
                 scheduledType = 'THEORY';
                 scheduledModality = data.modalityWeekly;
             } else {
                 scheduledType = 'PRACTICE';
             }
+        } else if (weeklyTheoryPending && practiceAlreadyDone) {
+            scheduledType = 'THEORY';
+            scheduledModality = data.modalityWeekly;
         } else {
             scheduledType = 'PRACTICE';
         }
@@ -404,7 +412,40 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
   }
 
   // Pass 2: real run, with Final Immersion pinned to its Monday-aligned window.
-  const { calendar, endDate, holidayReport, theoryHoursConsumed, practiceHoursConsumed } = runSimulation(data, startDate, initialImmersionWindow, finalImmersionWindow);
+  const pass2 = runSimulation(data, startDate, initialImmersionWindow, finalImmersionWindow);
+  const { calendar, holidayReport } = pass2;
+  let endDate = pass2.endDate;
+  let theoryHoursConsumed = pass2.theoryHoursConsumed;
+  let practiceHoursConsumed = pass2.practiceHoursConsumed;
+
+  // Top-up: Final Immersion's window is fixed (Híbrido must never extend it past its
+  // 10-corridos/2-semanas shape), so a holiday landing inside it eats real hours with
+  // nothing left afterward to compensate - the only case the "self-correcting" weekly
+  // pacing above can't reach. Close that specific gap with extra weekday days appended
+  // right after the calendar's natural end, never touching Immersion's own dates and
+  // never leaving a blank day.
+  let topUpDate = addDays(endDate, 1);
+  let safetyTopUp = 0;
+  while (theoryHoursConsumed < data.totalTheoryHours && safetyTopUp < 60) {
+    if (!isNonAttendanceDay(topUpDate, data)) {
+      calendar.forEach(d => { d.isEnd = false; });
+      calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY, description: 'Reposição de Carga Teórica', modality: data.modalityWeekly, isEnd: true });
+      theoryHoursConsumed += HOURS_PER_DAY;
+      endDate = new Date(topUpDate);
+    }
+    topUpDate = addDays(topUpDate, 1);
+    safetyTopUp++;
+  }
+  while (practiceHoursConsumed < data.totalPracticeHours && safetyTopUp < 120) {
+    if (!isNonAttendanceDay(topUpDate, data)) {
+      calendar.forEach(d => { d.isEnd = false; });
+      calendar.push({ date: new Date(topUpDate), dayType: DayType.PRACTICE, description: 'Reposição de Carga Prática', isEnd: true });
+      practiceHoursConsumed += HOURS_PER_DAY;
+      endDate = new Date(topUpDate);
+    }
+    topUpDate = addDays(topUpDate, 1);
+    safetyTopUp++;
+  }
 
   if (data.recessStart && data.recessEnd) {
     const recessStart = startOfDay(parseISO(data.recessStart));
