@@ -66,6 +66,8 @@ interface SimulationResult {
   endDate: Date;
   holidayReport: HolidayReportItem[];
   finalImmersionStart: Date | null;
+  theoryHoursConsumed: number;
+  practiceHoursConsumed: number;
 }
 
 // Runs the full day-by-day simulation. When `finalImmersionWindow` is null, the final
@@ -338,7 +340,7 @@ const runSimulation = (
   if (lastActivityIndex !== -1) calendar[lastActivityIndex].isEnd = true;
   const endDate = lastActivityIndex !== -1 ? calendar[lastActivityIndex].date : startDate;
 
-  return { calendar, endDate, holidayReport, finalImmersionStart };
+  return { calendar, endDate, holidayReport, finalImmersionStart, theoryHoursConsumed, practiceHoursConsumed };
 };
 
 export const calculateCalendar = (data: AppFormData): CalculationResult => {
@@ -379,7 +381,7 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
   }
 
   // Pass 2: real run, with Final Immersion pinned to its Monday-aligned window.
-  const { calendar, endDate, holidayReport } = runSimulation(data, startDate, initialImmersionWindow, finalImmersionWindow);
+  const { calendar, endDate, holidayReport, theoryHoursConsumed, practiceHoursConsumed } = runSimulation(data, startDate, initialImmersionWindow, finalImmersionWindow);
 
   if (data.recessStart && data.recessEnd) {
     const recessStart = startOfDay(parseISO(data.recessStart));
@@ -391,9 +393,17 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
     });
   }
 
-  // Stats - Forced to match input as per user request
+  // Official stats - match the contract's input hours exactly (what goes on the PDF).
   const totalDaysTheory = Math.round(data.totalTheoryHours / HOURS_PER_DAY);
   const totalDaysPractice = Math.round(data.totalPracticeHours / HOURS_PER_DAY);
+
+  // Real stats - what the day-by-day calendar actually adds up to (accounting for
+  // holiday/recess/bridge impact rules), so a mismatch against the official hours above
+  // is visible before finalizing the contract.
+  const realTheoryHours = theoryHoursConsumed;
+  const realPracticeHours = practiceHoursConsumed;
+  const realDaysTheory = Math.round(realTheoryHours / HOURS_PER_DAY);
+  const realDaysPractice = Math.round(realPracticeHours / HOURS_PER_DAY);
 
   const totalDaysRecess = calendar.filter(d => d.dayType === DayType.RECESS).length;
   const totalDaysHoliday = calendar.filter(d => d.dayType === DayType.HOLIDAY).length;
@@ -420,6 +430,10 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
     totalDaysRecess,
     totalDaysHoliday,
     monthsSpanned,
-    holidayReport: uniqueReport
+    holidayReport: uniqueReport,
+    realTheoryHours,
+    realPracticeHours,
+    realDaysTheory,
+    realDaysPractice,
   };
 };

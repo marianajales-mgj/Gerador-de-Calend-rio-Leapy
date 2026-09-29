@@ -114,10 +114,14 @@ export interface HolidayReportItem {
 export interface CalculationResult {
   calendar: CalendarDay[];
   endDate: Date;
-  totalDaysTheory: number;
-  totalDaysPractice: number;
+  totalDaysTheory: number; // Oficial - vai para o PDF/Excel (a partir da carga horária de entrada)
+  totalDaysPractice: number; // Oficial - vai para o PDF/Excel (a partir da carga horária de entrada)
   totalDaysRecess: number;
   totalDaysHoliday: number;
   monthsSpanned: Date[];
   holidayReport: HolidayReportItem[];
+  realTheoryHours: number; // Real - soma dia a dia do calendário calculado
+  realPracticeHours: number; // Real - soma dia a dia do calendário calculado
+  realDaysTheory: number;
+  realDaysPractice: number;
 }

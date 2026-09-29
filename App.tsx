@@ -225,7 +225,19 @@ const App: React.FC = () => {
   const totalDays = result ? result.totalDaysTheory + result.totalDaysPractice : 0;
   const theoryPct = result && totalDays > 0 ? Math.round((result.totalDaysTheory / totalDays) * 100) : 0;
   const practicePct = result && totalDays > 0 ? Math.round((result.totalDaysPractice / totalDays) * 100) : 0;
-  
+
+  // Real (calendar-derived) hours vs the official contracted hours: red if the real
+  // calendar falls short of what's required, amber if it goes over.
+  const hoursDiffClass = (real: number, official: number) => {
+    if (real === official) return 'text-slate-700';
+    return real < official ? 'text-red-600 font-semibold' : 'text-amber-600 font-semibold';
+  };
+  const renderHoursDiff = (real: number, official: number) => {
+    const diff = real - official;
+    if (diff === 0) return null;
+    return <span className="text-xs ml-1">({diff > 0 ? '+' : ''}{diff}h)</span>;
+  };
+
   const cities = CITIES_BY_STATE[formData.state] || [];
 
   const ModalitySelector = ({ name, value, onChange, allowHybrid = false }: { name: string, value: WeeklyModality, onChange: any, allowHybrid?: boolean }) => (
@@ -753,7 +765,8 @@ const App: React.FC = () => {
                          <tr>
                            <th className="px-6 py-3 font-medium">Item</th>
                            <th className="px-6 py-3 font-medium">Dias</th>
-                           <th className="px-6 py-3 font-medium">Horas</th>
+                           <th className="px-6 py-3 font-medium">Horas Reais <span className="normal-case font-normal text-slate-400">(calendário)</span></th>
+                           <th className="px-6 py-3 font-medium">Horas Oficial <span className="normal-case font-normal text-slate-400">(PDF)</span></th>
                            <th className="px-6 py-3 font-medium">%</th>
                          </tr>
                        </thead>
@@ -761,24 +774,39 @@ const App: React.FC = () => {
                          <tr>
                            <td className="px-6 py-3 font-medium text-slate-700">Teóricas</td>
                            <td className="px-6 py-3">{result.totalDaysTheory}</td>
+                           <td className={`px-6 py-3 ${hoursDiffClass(result.realTheoryHours, formData.totalTheoryHours)}`}>
+                             {result.realTheoryHours}h{renderHoursDiff(result.realTheoryHours, formData.totalTheoryHours)}
+                           </td>
                            <td className="px-6 py-3">{formData.totalTheoryHours}h</td>
                            <td className="px-6 py-3 text-blue-600 font-medium">{theoryPct}%</td>
                          </tr>
                          <tr>
                            <td className="px-6 py-3 font-medium text-slate-700">Práticas</td>
                            <td className="px-6 py-3">{result.totalDaysPractice}</td>
+                           <td className={`px-6 py-3 ${hoursDiffClass(result.realPracticeHours, formData.totalPracticeHours)}`}>
+                             {result.realPracticeHours}h{renderHoursDiff(result.realPracticeHours, formData.totalPracticeHours)}
+                           </td>
                            <td className="px-6 py-3">{formData.totalPracticeHours}h</td>
                            <td className="px-6 py-3 text-amber-600 font-medium">{practicePct}%</td>
                          </tr>
                          <tr className="bg-slate-50 font-semibold text-slate-800">
                            <td className="px-6 py-3">Total</td>
                            <td className="px-6 py-3">{totalDays}</td>
+                           <td className={`px-6 py-3 ${hoursDiffClass(result.realTheoryHours + result.realPracticeHours, formData.totalTheoryHours + formData.totalPracticeHours)}`}>
+                             {result.realTheoryHours + result.realPracticeHours}h
+                             {renderHoursDiff(result.realTheoryHours + result.realPracticeHours, formData.totalTheoryHours + formData.totalPracticeHours)}
+                           </td>
                            <td className="px-6 py-3">{formData.totalTheoryHours + formData.totalPracticeHours}h</td>
                            <td className="px-6 py-3">100%</td>
                          </tr>
                        </tbody>
                      </table>
                    </div>
+                   {(result.realTheoryHours !== formData.totalTheoryHours || result.realPracticeHours !== formData.totalPracticeHours) && (
+                     <p className="px-6 py-3 text-xs text-slate-500 border-t border-slate-100 bg-slate-50">
+                       <strong className="text-slate-600">Horas Reais</strong> = soma dia a dia do calendário calculado (considera feriados, recesso e emendas). <strong className="text-slate-600">Horas Oficial</strong> = carga contratual que vai para o PDF/Excel. Divergência acima em <span className="text-red-600 font-medium">vermelho</span> (abaixo do exigido) ou <span className="text-amber-600 font-medium">laranja</span> (acima do exigido).
+                     </p>
+                   )}
                 </div>
 
                 {/* Legend Preview */}
