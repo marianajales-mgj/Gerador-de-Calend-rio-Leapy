@@ -106,6 +106,12 @@ const runSimulation = (
   const lastOverrideDate = overrideDates.length > 0 ? new Date(Math.max(...overrideDates.map(d => d.getTime()))) : null;
 
   const hoursForFinalImmersion = data.immersionDaysEnd * HOURS_PER_DAY;
+  // Reserves room for Final Immersion's own fixed contribution: the ongoing weekly
+  // course day stops crediting NEW theory hours once what's left to reach the official
+  // load is small enough for Immersion alone to cover - otherwise the weekly day would
+  // race past the point Immersion needs to still be "owed" hours, and Immersion's own
+  // dynamic trigger (which requires loopTheoryHours < totalTheoryHours) would never fire.
+  const isWeeklyTheoryQuotaOpen = () => (loopTheoryHours + hoursForFinalImmersion) < data.totalTheoryHours;
 
   const inWindow = (date: Date, w: ImmersionWindow | null) =>
     !!w && (isAfter(date, w.start) || isSameDay(date, w.start)) && (isBefore(date, w.end) || isSameDay(date, w.end));
@@ -189,19 +195,13 @@ const runSimulation = (
         scheduledDesc = 'Imersão Final';
         scheduledModality = data.modalityFinal;
     } else {
-        // Whether more weekly theory is actually still owed: based on hours truly
-        // credited so far (loopTheoryHours - e.g. less than nominal if a holiday was
-        // lost inside Immersion's fixed, non-extending window) plus what Final
-        // Immersion will still nominally contribute. This self-corrects for any
-        // Immersion shortfall by running the weekly phase a little longer, WITHOUT
-        // ever touching Immersion's own fixed date window.
-        const weeklyTheoryPending = (loopTheoryHours + hoursForFinalImmersion) < data.totalTheoryHours;
-
-        // The designated weekly course day is deterministic: THEORY on every occurrence
-        // until the load is fully covered, then PRACTICE for the rest of the contract.
-        // No pacing/throttling here - skipping a contracted class day for scheduling
-        // reasons isn't acceptable, the day is fixed by contract.
-        if (weekday === data.weeklyCourseDay && weeklyTheoryPending) {
+        // The designated weekly course day is a standing weekly commitment for the whole
+        // contract, not just until the official theory load is technically covered: by
+        // rule the apprentice can never have a practice-only week (1x theory + 4x
+        // practice, never 5x practice). It always stays THEORY-track, even once Immersion
+        // has already delivered the full official load - see the matching fallback branch
+        // below in day processing that keeps it visually THEORY without adding more hours.
+        if (weekday === data.weeklyCourseDay) {
             scheduledType = 'THEORY';
             scheduledModality = data.modalityWeekly;
         } else {
@@ -247,7 +247,7 @@ const runSimulation = (
       // double-count the day the window already compensated for (or double-lose it).
       if (!isWknd && !isInitialImmersionPhase && !isFinalImmersionPhase) {
          if (data.holidayImpact === 'NO_IMPACT') {
-             if (scheduledType === 'THEORY' && !isLoopTheoryFull()) {
+             if (scheduledType === 'THEORY' && isWeeklyTheoryQuotaOpen()) {
                  theoryHoursConsumed += HOURS_PER_DAY;
                  loopTheoryHours += HOURS_PER_DAY;
              }
@@ -270,7 +270,7 @@ const runSimulation = (
                 theoryHoursConsumed += HOURS_PER_DAY;
                 loopTheoryHours += HOURS_PER_DAY;
               }
-          } else if (!isLoopTheoryFull() && isRecessPeriod) {
+          } else if (isWeeklyTheoryQuotaOpen() && isRecessPeriod) {
               dayType = DayType.THEORY_RECESS;
               description = 'Recesso Teórico';
               if (data.recessImpact === 'NO_IMPACT') {
@@ -282,7 +282,7 @@ const runSimulation = (
               // still genuinely worked (never left blank).
               if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
               loopPracticeHours += HOURS_PER_DAY;
-          } else if (!isLoopTheoryFull() && isBridgeHoliday) {
+          } else if (isWeeklyTheoryQuotaOpen() && isBridgeHoliday) {
               dayType = DayType.THEORY_RECESS;
               description = 'Emenda de Feriado';
               if (data.bridgeHolidayImpact === 'NO_IMPACT') {
@@ -291,22 +291,21 @@ const runSimulation = (
               }
               if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
               loopPracticeHours += HOURS_PER_DAY;
-          } else if (!isLoopTheoryFull()) {
+          } else if (isWeeklyTheoryQuotaOpen()) {
               dayType = DayType.THEORY;
               description = scheduledDesc;
               modality = scheduledModality;
               theoryHoursConsumed += HOURS_PER_DAY;
               loopTheoryHours += HOURS_PER_DAY;
           } else {
-              // Theory's official load is already met. The apprentice is still genuinely
-              // at the company this day (never shown as blank), but once practice's own
-              // official load is also already met, this day no longer adds to the
-              // reported real hours - it's calendar time spent waiting for the fixed
-              // Immersion window or the natural end date, not additional required load.
-              dayType = DayType.PRACTICE;
-              description = 'Atividade Prática (Carga Teórica Finalizada)';
-              if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
-              loopPracticeHours += HOURS_PER_DAY;
+              // Theory's official hour load is already met, but the designated weekly
+              // course day itself never stops: the apprentice can't have a practice-only
+              // week, so this day stays THEORY-track for the rest of the contract - it
+              // just no longer adds to the reported real hours (the official load is
+              // already fully accounted for).
+              dayType = DayType.THEORY;
+              description = 'Dia de Curso (Carga Teórica Já Cumprida)';
+              modality = scheduledModality;
           }
       } else {
           dayType = DayType.PRACTICE;
