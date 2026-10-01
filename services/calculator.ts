@@ -434,28 +434,49 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
   // 10-corridos/2-semanas shape), so a holiday landing inside it eats real hours with
   // nothing left afterward to compensate - the only case the "self-correcting" weekly
   // pacing above can't reach. Close that specific gap with extra days appended right
-  // after the calendar's natural end, never touching Immersion's own dates and never
-  // leaving a blank day. Theory reposição keeps to the contract's own weekly course day
-  // (theory only ever happens on that fixed weekday); practice has no such restriction.
-  let topUpDate = addDays(endDate, 1);
+  // after the calendar's natural end. This walks every single calendar day (never
+  // skipping one - a skipped day with no pushed entry renders as a blank cell) and never
+  // puts PRACTICE on the designated weekly course day (1x teórica/4x prática rule holds
+  // even in this top-up tail, same as the main simulation above).
+  // Start right after the LAST date the main simulation actually produced an entry for
+  // (not after `endDate`, which skips trailing holidays/weekends on purpose for the
+  // "last real activity" meaning elsewhere) - otherwise a trailing holiday at the very
+  // end of Final Immersion's window would make topUpDate land on a date that already
+  // has a calendar entry, creating a duplicate.
+  let topUpDate = addDays(calendar[calendar.length - 1].date, 1);
   let safetyTopUp = 0;
-  while (theoryHoursConsumed < data.totalTheoryHours && safetyTopUp < 120) {
-    if (getDay(topUpDate) === data.weeklyCourseDay && !isNonAttendanceDay(topUpDate, data) && !isInRecess(topUpDate)) {
-      calendar.forEach(d => { d.isEnd = false; });
-      calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY, description: 'Reposição de Carga Teórica', modality: data.modalityWeekly, isEnd: true });
-      theoryHoursConsumed += HOURS_PER_DAY;
-      endDate = new Date(topUpDate);
+  while ((theoryHoursConsumed < data.totalTheoryHours || practiceHoursConsumed < data.totalPracticeHours) && safetyTopUp < 400) {
+    calendar.forEach(d => { d.isEnd = false; });
+
+    const isWknd = isWeekend(topUpDate);
+    const holidayInfo = !isWknd ? getHolidayInfo(topUpDate, data.city, data.state, data.excludedHolidays) : null;
+    const isDesignatedDay = getDay(topUpDate) === data.weeklyCourseDay;
+    const inRecess = !isWknd && !holidayInfo && isInRecess(topUpDate);
+
+    if (isWknd) {
+      calendar.push({ date: new Date(topUpDate), dayType: DayType.WEEKEND, isEnd: false });
+    } else if (holidayInfo) {
+      calendar.push({ date: new Date(topUpDate), dayType: DayType.HOLIDAY, description: holidayInfo.name, isEnd: false });
+    } else if (isDesignatedDay) {
+      if (theoryHoursConsumed < data.totalTheoryHours && !isNonAttendanceDay(topUpDate, data)) {
+        calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY, description: 'Reposição de Carga Teórica', modality: data.modalityWeekly, isEnd: true });
+        theoryHoursConsumed += HOURS_PER_DAY;
+        endDate = new Date(topUpDate);
+      } else {
+        // Theory already covered (or this designated day is itself a bridge holiday) -
+        // still never PRACTICE here, just a non-crediting theory-track filler.
+        calendar.push({ date: new Date(topUpDate), dayType: inRecess ? DayType.THEORY_RECESS : DayType.THEORY, description: inRecess ? 'Recesso Teórico' : 'Dia de Curso (Carga Teórica Já Cumprida)', isEnd: false });
+      }
+    } else {
+      if (practiceHoursConsumed < data.totalPracticeHours) {
+        calendar.push({ date: new Date(topUpDate), dayType: DayType.PRACTICE, description: 'Reposição de Carga Prática', isEnd: true });
+        practiceHoursConsumed += HOURS_PER_DAY;
+        endDate = new Date(topUpDate);
+      } else {
+        calendar.push({ date: new Date(topUpDate), dayType: DayType.PRACTICE, isEnd: false });
+      }
     }
-    topUpDate = addDays(topUpDate, 1);
-    safetyTopUp++;
-  }
-  while (practiceHoursConsumed < data.totalPracticeHours && safetyTopUp < 240) {
-    if (!isNonAttendanceDay(topUpDate, data) && !isInRecess(topUpDate)) {
-      calendar.forEach(d => { d.isEnd = false; });
-      calendar.push({ date: new Date(topUpDate), dayType: DayType.PRACTICE, description: 'Reposição de Carga Prática', isEnd: true });
-      practiceHoursConsumed += HOURS_PER_DAY;
-      endDate = new Date(topUpDate);
-    }
+
     topUpDate = addDays(topUpDate, 1);
     safetyTopUp++;
   }
