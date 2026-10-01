@@ -1,7 +1,7 @@
 import { addDays, subDays, isSameDay, isWeekend, getDay, isAfter, isBefore, parseISO, startOfDay, eachMonthOfInterval, startOfMonth, endOfMonth, differenceInCalendarDays } from 'date-fns';
 import { AppFormData, CalculationResult, CalendarDay, DayType, HolidayReportItem } from '../types';
 import { HOURS_PER_DAY } from '../constants';
-import { getHolidayInfo } from '../utils/dateUtils';
+import { getHolidayInfo, getDefaultRecessWindow } from '../utils/dateUtils';
 
 // Returns the date of the Nth weekday (Mon-Fri) counting from `start` (inclusive).
 // Weekends are skipped when counting, but the window length is otherwise fixed -
@@ -78,11 +78,9 @@ const runSimulation = (
   data: AppFormData,
   startDate: Date,
   initialImmersionWindow: ImmersionWindow | null,
-  finalImmersionWindow: ImmersionWindow | null
+  finalImmersionWindow: ImmersionWindow | null,
+  recessWindows: ImmersionWindow[]
 ): SimulationResult => {
-  const recessStart = data.recessStart ? startOfDay(parseISO(data.recessStart)) : null;
-  const recessEnd = data.recessEnd ? startOfDay(parseISO(data.recessEnd)) : null;
-
   let theoryHoursConsumed = 0;
   let practiceHoursConsumed = 0;
 
@@ -107,7 +105,6 @@ const runSimulation = (
   const overrideDates = Object.keys(data.overrides || {}).map(d => parseISO(d));
   const lastOverrideDate = overrideDates.length > 0 ? new Date(Math.max(...overrideDates.map(d => d.getTime()))) : null;
 
-  const initialImmersionHours = data.immersionDays * HOURS_PER_DAY;
   const hoursForFinalImmersion = data.immersionDaysEnd * HOURS_PER_DAY;
 
   const inWindow = (date: Date, w: ImmersionWindow | null) =>
@@ -135,13 +132,10 @@ const runSimulation = (
     const holidayInfo = getHolidayInfo(currentDate, data.city, data.state, data.excludedHolidays);
     const weekday = getDay(currentDate); // 0=Sun, 1=Mon...
 
-    let isRecessPeriod = false;
-    if (recessStart && recessEnd) {
-      if ((isAfter(currentDate, recessStart) || isSameDay(currentDate, recessStart)) &&
-          (isBefore(currentDate, recessEnd) || isSameDay(currentDate, recessEnd))) {
-        isRecessPeriod = true;
-      }
-    }
+    const isRecessPeriod = recessWindows.some(w =>
+      (isAfter(currentDate, w.start) || isSameDay(currentDate, w.start)) &&
+      (isBefore(currentDate, w.end) || isSameDay(currentDate, w.end))
+    );
 
     let isBridgeHoliday = false;
     if (data.adhereBridgeHolidays && !holidayInfo && !isWknd) {
@@ -203,30 +197,13 @@ const runSimulation = (
         // ever touching Immersion's own fixed date window.
         const weeklyTheoryPending = (loopTheoryHours + hoursForFinalImmersion) < data.totalTheoryHours;
 
-        // Once practice's real hours already meet the official target, the designated
-        // weekly day leans theory even if the pace check below would otherwise hold it
-        // back - closing the remaining theory gap for real. Theory NEVER happens on any
-        // other weekday, though: the weekly course day is fixed by contract.
-        const practiceAlreadyDone = isPracticeFull();
-
-        if (weekday === data.weeklyCourseDay) {
-            // Nominal split (immersion's advertised size), used ONLY to pace/spread the
-            // weekly theory day evenly across the contract - not to decide when to stop.
-            const nominalWeeklyTarget = Math.max(0, data.totalTheoryHours - initialImmersionHours - hoursForFinalImmersion);
-            const nominalWeeklyConsumed = Math.max(0, loopTheoryHours - initialImmersionHours);
-
-            // Spread the weekly theory day across the whole contract at the same pace as
-            // practice hours accumulate, instead of depleting all weekly theory hours as
-            // fast as possible and leaving a practice-only tail with no theoretical activity.
-            const theoryOnPace = data.totalPracticeHours <= 0 || nominalWeeklyTarget <= 0 ||
-                (nominalWeeklyConsumed / nominalWeeklyTarget) <= (loopPracticeHours / data.totalPracticeHours);
-
-            if (weeklyTheoryPending && (theoryOnPace || practiceAlreadyDone)) {
-                scheduledType = 'THEORY';
-                scheduledModality = data.modalityWeekly;
-            } else {
-                scheduledType = 'PRACTICE';
-            }
+        // The designated weekly course day is deterministic: THEORY on every occurrence
+        // until the load is fully covered, then PRACTICE for the rest of the contract.
+        // No pacing/throttling here - skipping a contracted class day for scheduling
+        // reasons isn't acceptable, the day is fixed by contract.
+        if (weekday === data.weeklyCourseDay && weeklyTheoryPending) {
+            scheduledType = 'THEORY';
+            scheduledModality = data.modalityWeekly;
         } else {
             scheduledType = 'PRACTICE';
         }
@@ -371,12 +348,24 @@ const runSimulation = (
 export const calculateCalendar = (data: AppFormData): CalculationResult => {
   const startDate = startOfDay(parseISO(data.startDate));
 
-  const recessStart = data.recessStart ? startOfDay(parseISO(data.recessStart)) : null;
-  const recessEnd = data.recessEnd ? startOfDay(parseISO(data.recessEnd)) : null;
-  const overlapsRecess = (w: ImmersionWindow): boolean =>
-    !!recessStart && !!recessEnd && (isBefore(w.start, recessEnd) || isSameDay(w.start, recessEnd)) && (isAfter(w.end, recessStart) || isSameDay(w.end, recessStart));
+  // School recess recurs every December for as long as the contract runs, not just once -
+  // a contract spanning more than one calendar year must get a recess window for each
+  // December it touches. The first window honors whatever the user set (incl. manual
+  // edits); subsequent years reuse the same last-3-weeks-of-December formula.
+  const recessWindows: ImmersionWindow[] = [];
+  if (data.recessStart && data.recessEnd) {
+    const firstStart = startOfDay(parseISO(data.recessStart));
+    const firstEnd = startOfDay(parseISO(data.recessEnd));
+    recessWindows.push({ start: firstStart, end: firstEnd });
+
+    const firstYear = firstStart.getFullYear();
+    for (let i = 1; i <= 4; i++) {
+      const w = getDefaultRecessWindow(new Date(firstYear + i, 0, 1));
+      recessWindows.push({ start: startOfDay(parseISO(w.start)), end: startOfDay(parseISO(w.end)) });
+    }
+  }
   const isInRecess = (date: Date): boolean =>
-    !!recessStart && !!recessEnd && (isAfter(date, recessStart) || isSameDay(date, recessStart)) && (isBefore(date, recessEnd) || isSameDay(date, recessEnd));
+    recessWindows.some(r => (isAfter(date, r.start) || isSameDay(date, r.start)) && (isBefore(date, r.end) || isSameDay(date, r.end)));
 
   // Two different immersion shapes, per course format:
   // - Hybrid course (immersionDaysEnd > 0: initial + final Presencial immersion): both are
@@ -398,7 +387,7 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
 
   if (data.immersionDaysEnd > 0) {
     // Pass 1: estimate where Final Immersion would naturally fall (dynamic trigger).
-    const estimate = runSimulation(data, startDate, initialImmersionWindow, null);
+    const estimate = runSimulation(data, startDate, initialImmersionWindow, null, recessWindows);
 
     if (estimate.finalImmersionStart) {
       // Snap Final Immersion to start on a Monday - but only ever FORWARD, never earlier.
@@ -413,13 +402,20 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
       let targetMonday = daysFromMonday === 0 ? mondayThisWeek : addDays(mondayThisWeek, 7);
       let candidate: ImmersionWindow = { start: targetMonday, end: nthWeekdayFrom(targetMonday, data.immersionDaysEnd) };
 
-      // Final Immersion is a fixed, intensive presencial block - it must never overlap the
-      // school recess (the apprentice's own scheduled break). If the natural Monday-aligned
-      // window falls on or inside the recess, push it forward to the Monday right after
-      // recess ends instead of letting it silently swallow recess days.
+      // Final Immersion is a fixed, intensive presencial block - it must never overlap any
+      // school recess (the apprentice's own scheduled break, recurring every December). If
+      // the natural Monday-aligned window falls on or inside a recess, push it forward to
+      // the Monday right after that recess ends instead of letting it silently swallow
+      // recess days.
       let recessGuard = 0;
-      while (overlapsRecess(candidate) && recessGuard < 10) {
-        targetMonday = addDays(mondayOfWeek(recessEnd!), 7);
+      while (recessGuard < 10) {
+        const overlapping = recessWindows.filter(r =>
+          (isBefore(candidate.start, r.end) || isSameDay(candidate.start, r.end)) &&
+          (isAfter(candidate.end, r.start) || isSameDay(candidate.end, r.start))
+        );
+        if (overlapping.length === 0) break;
+        const latestEnd = overlapping.reduce((max, r) => isAfter(r.end, max) ? r.end : max, overlapping[0].end);
+        targetMonday = addDays(mondayOfWeek(latestEnd), 7);
         candidate = { start: targetMonday, end: nthWeekdayFrom(targetMonday, data.immersionDaysEnd) };
         recessGuard++;
       }
@@ -429,7 +425,7 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
   }
 
   // Pass 2: real run, with Final Immersion pinned to its Monday-aligned window.
-  const pass2 = runSimulation(data, startDate, initialImmersionWindow, finalImmersionWindow);
+  const pass2 = runSimulation(data, startDate, initialImmersionWindow, finalImmersionWindow, recessWindows);
   const { calendar, holidayReport } = pass2;
   let endDate = pass2.endDate;
   let theoryHoursConsumed = pass2.theoryHoursConsumed;
@@ -465,13 +461,16 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
     safetyTopUp++;
   }
 
-  if (recessStart && recessEnd) {
+  // Only report recess windows that actually fall within the generated contract span -
+  // recessWindows includes a few extra future years generated defensively, most of which
+  // never apply to this particular contract.
+  recessWindows.filter(w => !isAfter(w.start, endDate)).forEach(w => {
     holidayReport.push({
-        date: recessStart,
-        name: `Início do Recesso Escolar (até ${recessEnd.toLocaleDateString('pt-BR')})`,
+        date: w.start,
+        name: `Início do Recesso Escolar (até ${w.end.toLocaleDateString('pt-BR')})`,
         type: 'RECESS'
     });
-  }
+  });
 
   // Official stats - match the contract's input hours exactly (what goes on the PDF).
   const totalDaysTheory = Math.round(data.totalTheoryHours / HOURS_PER_DAY);
