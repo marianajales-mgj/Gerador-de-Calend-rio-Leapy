@@ -103,6 +103,17 @@ export interface CalendarDay {
   isEnd?: boolean;
   description?: string;
   modality?: WeeklyModality; // New
+  theoryCredit?: boolean; // This square counts 6h toward the REAL theory hours
+  practiceCredit?: boolean; // This square counts 6h toward the REAL practice hours
+}
+
+// Count of calendar squares ("quadradinhos") by the colour/role they play in the REAL hours.
+export interface CreditBreakdown {
+  theory: { immersion: number; weekly: number; recess: number; holiday: number };
+  practice: { practice: number; recess: number };
+  noCredit: { weeklyCovered: number; practiceOver: number; immersionOver: number; recess: number; holiday: number; manual: number };
+  distinctDays: number; // squares that credit anything (a recess/emenda square can credit both)
+  doubleCreditDays: number; // squares that credit theory AND practice at the same time
 }
 
 export interface HolidayReportItem {
@@ -120,8 +131,9 @@ export interface CalculationResult {
   totalDaysHoliday: number;
   monthsSpanned: Date[];
   holidayReport: HolidayReportItem[];
-  realTheoryHours: number; // Real - soma dia a dia do calendário calculado
-  realPracticeHours: number; // Real - soma dia a dia do calendário calculado
-  realDaysTheory: number;
-  realDaysPractice: number;
+  realTheoryHours: number; // Real - quadradinhos que creditam teórica x 6h
+  realPracticeHours: number; // Real - quadradinhos que creditam prática x 6h
+  realDaysTheory: number; // Real - contagem exata de quadradinhos que creditam teórica
+  realDaysPractice: number; // Real - contagem exata de quadradinhos que creditam prática
+  creditBreakdown: CreditBreakdown;
 }

@@ -1,5 +1,5 @@
 import { addDays, subDays, isSameDay, isWeekend, getDay, isAfter, isBefore, parseISO, startOfDay, eachMonthOfInterval, startOfMonth, endOfMonth, differenceInCalendarDays } from 'date-fns';
-import { AppFormData, CalculationResult, CalendarDay, DayType, HolidayReportItem } from '../types';
+import { AppFormData, CalculationResult, CalendarDay, CreditBreakdown, DayType, HolidayReportItem } from '../types';
 import { HOURS_PER_DAY } from '../constants';
 import { getHolidayInfo, getDefaultRecessWindow } from '../utils/dateUtils';
 
@@ -146,7 +146,9 @@ const runSimulation = (
   let lastCreditedIndex = -1;
 
   while (shouldContinue()) {
-    const creditedBefore = theoryHoursConsumed + practiceHoursConsumed;
+    const theoryBefore = theoryHoursConsumed;
+    const practiceBefore = practiceHoursConsumed;
+    const creditedBefore = theoryBefore + practiceBefore;
     const dateKey = currentDate.toISOString().split('T')[0];
     const manualOverride = data.overrides?.[dateKey];
 
@@ -340,7 +342,9 @@ const runSimulation = (
       dayType,
       description,
       isStart: isSameDay(currentDate, startDate),
-      modality
+      modality,
+      theoryCredit: theoryHoursConsumed > theoryBefore,
+      practiceCredit: practiceHoursConsumed > practiceBefore
     });
 
     currentDate = addDays(currentDate, 1);
@@ -364,6 +368,42 @@ const runSimulation = (
   const endDate = lastActivityIndex !== -1 ? calendar[lastActivityIndex].date : startDate;
 
   return { calendar, endDate, holidayReport, finalImmersionStart, theoryHoursConsumed, practiceHoursConsumed };
+};
+
+// Counts the calendar squares by the role they play in the REAL hours, so the on-screen
+// summary can show exactly which coloured squares add up to each real total.
+const buildCreditBreakdown = (calendar: CalendarDay[]): CreditBreakdown => {
+  const b: CreditBreakdown = {
+    theory: { immersion: 0, weekly: 0, recess: 0, holiday: 0 },
+    practice: { practice: 0, recess: 0 },
+    noCredit: { weeklyCovered: 0, practiceOver: 0, immersionOver: 0, recess: 0, holiday: 0, manual: 0 },
+    distinctDays: 0,
+    doubleCreditDays: 0,
+  };
+  for (const d of calendar) {
+    if (isWeekend(d.date) && d.dayType !== DayType.HOLIDAY) continue;
+    const t = !!d.theoryCredit;
+    const p = !!d.practiceCredit;
+    if (t || p) b.distinctDays++;
+    if (t && p) b.doubleCreditDays++;
+    if (d.description === 'Alteração Manual') { if (!t && !p) b.noCredit.manual++; continue; }
+    switch (d.dayType) {
+      case DayType.IMMERSION: if (t) b.theory.immersion++; else b.noCredit.immersionOver++; break;
+      case DayType.THEORY: if (t) b.theory.weekly++; else b.noCredit.weeklyCovered++; break;
+      case DayType.THEORY_RECESS:
+        if (t) b.theory.recess++;
+        if (p) b.practice.recess++;
+        if (!t && !p) b.noCredit.recess++;
+        break;
+      case DayType.HOLIDAY:
+        if (t) b.theory.holiday++;
+        else if (!isWeekend(d.date)) b.noCredit.holiday++;
+        break;
+      case DayType.PRACTICE: if (p) b.practice.practice++; else b.noCredit.practiceOver++; break;
+      default: break;
+    }
+  }
+  return b;
 };
 
 export const calculateCalendar = (data: AppFormData): CalculationResult => {
@@ -484,13 +524,13 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
         // Recess / emenda on the course day: class pauses, apprentice goes to the company
         // (same treatment as the main simulation). Never a theory reposição day.
         const credits = practiceHoursConsumed < data.totalPracticeHours;
-        calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY_RECESS, description: inRecess ? 'Recesso Teórico' : 'Emenda de Feriado', isEnd: credits });
+        calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY_RECESS, description: inRecess ? 'Recesso Teórico' : 'Emenda de Feriado', isEnd: credits, theoryCredit: false, practiceCredit: credits });
         if (credits) {
           practiceHoursConsumed += HOURS_PER_DAY;
           endDate = new Date(topUpDate);
         }
       } else if (theoryHoursConsumed < data.totalTheoryHours) {
-        calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY, description: 'Reposição de Carga Teórica', modality: data.modalityWeekly, isEnd: true });
+        calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY, description: 'Reposição de Carga Teórica', modality: data.modalityWeekly, isEnd: true, theoryCredit: true, practiceCredit: false });
         theoryHoursConsumed += HOURS_PER_DAY;
         endDate = new Date(topUpDate);
       } else {
@@ -500,7 +540,7 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
       }
     } else {
       if (practiceHoursConsumed < data.totalPracticeHours) {
-        calendar.push({ date: new Date(topUpDate), dayType: DayType.PRACTICE, description: 'Reposição de Carga Prática', isEnd: true });
+        calendar.push({ date: new Date(topUpDate), dayType: DayType.PRACTICE, description: 'Reposição de Carga Prática', isEnd: true, theoryCredit: false, practiceCredit: true });
         practiceHoursConsumed += HOURS_PER_DAY;
         endDate = new Date(topUpDate);
       } else {
@@ -527,13 +567,13 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
   const totalDaysTheory = Math.round(data.totalTheoryHours / HOURS_PER_DAY);
   const totalDaysPractice = Math.round(data.totalPracticeHours / HOURS_PER_DAY);
 
-  // Real stats - what the day-by-day calendar actually adds up to (accounting for
-  // holiday/recess/bridge impact rules), so a mismatch against the official hours above
-  // is visible before finalizing the contract.
-  const realTheoryHours = theoryHoursConsumed;
-  const realPracticeHours = practiceHoursConsumed;
-  const realDaysTheory = Math.round(realTheoryHours / HOURS_PER_DAY);
-  const realDaysPractice = Math.round(realPracticeHours / HOURS_PER_DAY);
+  // Real stats - the exact count of calendar squares that credit hours (each square = 6h),
+  // so a mismatch against the official hours above is visible before finalizing.
+  const realDaysTheory = calendar.filter(d => d.theoryCredit).length;
+  const realDaysPractice = calendar.filter(d => d.practiceCredit).length;
+  const realTheoryHours = realDaysTheory * HOURS_PER_DAY;
+  const realPracticeHours = realDaysPractice * HOURS_PER_DAY;
+  const creditBreakdown = buildCreditBreakdown(calendar);
 
   const totalDaysRecess = calendar.filter(d => d.dayType === DayType.RECESS).length;
   const totalDaysHoliday = calendar.filter(d => d.dayType === DayType.HOLIDAY).length;
@@ -565,5 +605,6 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
     realPracticeHours,
     realDaysTheory,
     realDaysPractice,
+    creditBreakdown,
   };
 };

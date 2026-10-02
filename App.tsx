@@ -222,20 +222,18 @@ const App: React.FC = () => {
     formData.immersionDays >= 0 &&
     isRecessValid;
 
-  const totalDays = result ? result.totalDaysTheory + result.totalDaysPractice : 0;
-  const theoryPct = result && totalDays > 0 ? Math.round((result.totalDaysTheory / totalDays) * 100) : 0;
-  const practicePct = result && totalDays > 0 ? Math.round((result.totalDaysPractice / totalDays) * 100) : 0;
+  const officialTotalDays = result ? result.totalDaysTheory + result.totalDaysPractice : 0;
 
-  // Real (calendar-derived) hours vs the official contracted hours: red if the real
+  // Real (calendar-derived) numbers vs the official contracted ones: red if the real
   // calendar falls short of what's required, amber if it goes over.
-  const hoursDiffClass = (real: number, official: number) => {
+  const diffClass = (real: number, official: number) => {
     if (real === official) return 'text-slate-700';
     return real < official ? 'text-red-600 font-semibold' : 'text-amber-600 font-semibold';
   };
-  const renderHoursDiff = (real: number, official: number) => {
+  const renderDiff = (real: number, official: number, unit: string) => {
     const diff = real - official;
     if (diff === 0) return null;
-    return <span className="text-xs ml-1">({diff > 0 ? '+' : ''}{diff}h)</span>;
+    return <span className="text-xs ml-1">({diff > 0 ? '+' : ''}{diff}{unit})</span>;
   };
 
   const cities = CITIES_BY_STATE[formData.state] || [];
@@ -764,49 +762,122 @@ const App: React.FC = () => {
                        <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-100">
                          <tr>
                            <th className="px-6 py-3 font-medium">Item</th>
-                           <th className="px-6 py-3 font-medium">Dias</th>
-                           <th className="px-6 py-3 font-medium">Horas Reais <span className="normal-case font-normal text-slate-400">(calendário)</span></th>
-                           <th className="px-6 py-3 font-medium">Horas Oficial <span className="normal-case font-normal text-slate-400">(PDF)</span></th>
-                           <th className="px-6 py-3 font-medium">%</th>
+                           <th className="px-6 py-3 font-medium">Dias reais</th>
+                           <th className="px-6 py-3 font-medium">Horas reais <span className="normal-case font-normal text-slate-400">(calendário)</span></th>
+                           <th className="px-6 py-3 font-medium">Dias oficial <span className="normal-case font-normal text-slate-400">(PDF)</span></th>
+                           <th className="px-6 py-3 font-medium">Horas oficial <span className="normal-case font-normal text-slate-400">(PDF)</span></th>
                          </tr>
                        </thead>
                        <tbody className="divide-y divide-slate-100">
                          <tr>
                            <td className="px-6 py-3 font-medium text-slate-700">Teóricas</td>
-                           <td className="px-6 py-3">{result.totalDaysTheory}</td>
-                           <td className={`px-6 py-3 ${hoursDiffClass(result.realTheoryHours, formData.totalTheoryHours)}`}>
-                             {result.realTheoryHours}h{renderHoursDiff(result.realTheoryHours, formData.totalTheoryHours)}
+                           <td className={`px-6 py-3 ${diffClass(result.realDaysTheory, result.totalDaysTheory)}`}>
+                             {result.realDaysTheory}{renderDiff(result.realDaysTheory, result.totalDaysTheory, '')}
                            </td>
+                           <td className={`px-6 py-3 ${diffClass(result.realTheoryHours, formData.totalTheoryHours)}`}>
+                             {result.realTheoryHours}h{renderDiff(result.realTheoryHours, formData.totalTheoryHours, 'h')}
+                           </td>
+                           <td className="px-6 py-3">{result.totalDaysTheory}</td>
                            <td className="px-6 py-3">{formData.totalTheoryHours}h</td>
-                           <td className="px-6 py-3 text-blue-600 font-medium">{theoryPct}%</td>
                          </tr>
                          <tr>
                            <td className="px-6 py-3 font-medium text-slate-700">Práticas</td>
-                           <td className="px-6 py-3">{result.totalDaysPractice}</td>
-                           <td className={`px-6 py-3 ${hoursDiffClass(result.realPracticeHours, formData.totalPracticeHours)}`}>
-                             {result.realPracticeHours}h{renderHoursDiff(result.realPracticeHours, formData.totalPracticeHours)}
+                           <td className={`px-6 py-3 ${diffClass(result.realDaysPractice, result.totalDaysPractice)}`}>
+                             {result.realDaysPractice}{renderDiff(result.realDaysPractice, result.totalDaysPractice, '')}
                            </td>
+                           <td className={`px-6 py-3 ${diffClass(result.realPracticeHours, formData.totalPracticeHours)}`}>
+                             {result.realPracticeHours}h{renderDiff(result.realPracticeHours, formData.totalPracticeHours, 'h')}
+                           </td>
+                           <td className="px-6 py-3">{result.totalDaysPractice}</td>
                            <td className="px-6 py-3">{formData.totalPracticeHours}h</td>
-                           <td className="px-6 py-3 text-amber-600 font-medium">{practicePct}%</td>
                          </tr>
                          <tr className="bg-slate-50 font-semibold text-slate-800">
                            <td className="px-6 py-3">Total</td>
-                           <td className="px-6 py-3">{totalDays}</td>
-                           <td className={`px-6 py-3 ${hoursDiffClass(result.realTheoryHours + result.realPracticeHours, formData.totalTheoryHours + formData.totalPracticeHours)}`}>
-                             {result.realTheoryHours + result.realPracticeHours}h
-                             {renderHoursDiff(result.realTheoryHours + result.realPracticeHours, formData.totalTheoryHours + formData.totalPracticeHours)}
+                           <td className={`px-6 py-3 ${diffClass(result.creditBreakdown.distinctDays, officialTotalDays)}`}>
+                             {result.creditBreakdown.distinctDays}{renderDiff(result.creditBreakdown.distinctDays, officialTotalDays, '')}
                            </td>
+                           <td className={`px-6 py-3 ${diffClass(result.realTheoryHours + result.realPracticeHours, formData.totalTheoryHours + formData.totalPracticeHours)}`}>
+                             {result.realTheoryHours + result.realPracticeHours}h
+                             {renderDiff(result.realTheoryHours + result.realPracticeHours, formData.totalTheoryHours + formData.totalPracticeHours, 'h')}
+                           </td>
+                           <td className="px-6 py-3">{officialTotalDays}</td>
                            <td className="px-6 py-3">{formData.totalTheoryHours + formData.totalPracticeHours}h</td>
-                           <td className="px-6 py-3">100%</td>
                          </tr>
                        </tbody>
                      </table>
                    </div>
-                   {(result.realTheoryHours !== formData.totalTheoryHours || result.realPracticeHours !== formData.totalPracticeHours) && (
-                     <p className="px-6 py-3 text-xs text-slate-500 border-t border-slate-100 bg-slate-50">
-                       <strong className="text-slate-600">Horas Reais</strong> = soma dia a dia do calendário calculado (considera feriados, recesso e emendas). <strong className="text-slate-600">Horas Oficial</strong> = carga contratual que vai para o PDF/Excel. Divergência acima em <span className="text-red-600 font-medium">vermelho</span> (abaixo do exigido) ou <span className="text-amber-600 font-medium">laranja</span> (acima do exigido).
-                     </p>
-                   )}
+
+                   {/* Contagem exata dos quadradinhos: o que soma em cada total real */}
+                   {(() => {
+                     const b = result.creditBreakdown;
+                     const Row: React.FC<{ color: string; label: string; days: number; hideHours?: boolean }> = ({ color, label, days, hideHours }) => (
+                       <div className="flex items-center justify-between gap-3 py-1">
+                         <span className="flex items-center gap-2">
+                           <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: color }}></span>
+                           {label}
+                         </span>
+                         <span className="tabular-nums text-slate-600">{days} dia{days === 1 ? '' : 's'}{hideHours ? '' : ` = ${days * 6}h`}</span>
+                       </div>
+                     );
+                     const theoryRows = [
+                       { color: '#1e3a8a', label: 'Imersão', days: b.theory.immersion },
+                       { color: '#373afd', label: 'Aula semanal', days: b.theory.weekly },
+                       { color: '#bfdbfe', label: 'Recesso / emenda contado como aula', days: b.theory.recess },
+                       { color: '#374151', label: 'Feriado em dia de curso contado como aula', days: b.theory.holiday },
+                     ];
+                     const practiceRows = [
+                       { color: '#FEF08A', label: 'Prática', days: b.practice.practice },
+                       { color: '#bfdbfe', label: 'Recesso / emenda com prática na empresa', days: b.practice.recess },
+                     ];
+                     const noCreditRows = [
+                       { color: '#373afd', label: 'Dia de curso com carga teórica já cumprida', days: b.noCredit.weeklyCovered },
+                       { color: '#FEF08A', label: 'Prática depois de atingir a carga oficial', days: b.noCredit.practiceOver },
+                       { color: '#1e3a8a', label: 'Imersão depois de atingir a carga oficial', days: b.noCredit.immersionOver },
+                       { color: '#bfdbfe', label: 'Recesso / emenda sem crédito', days: b.noCredit.recess },
+                       { color: '#374151', label: 'Feriados sem crédito', days: b.noCredit.holiday },
+                       { color: '#fb923c', label: 'Alterações manuais (não entram na soma)', days: b.noCredit.manual },
+                     ].filter(r => r.days > 0);
+                     return (
+                       <div className="px-6 py-4 border-t border-slate-100 text-xs text-slate-700">
+                         <p className="font-semibold text-slate-600 uppercase tracking-wide mb-3">Contagem dos quadradinhos (cada um = 6h)</p>
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                           <div>
+                             <p className="font-semibold text-slate-700 mb-1">Teóricas reais</p>
+                             {theoryRows.map(r => <Row key={r.label} {...r} />)}
+                             <div className="flex justify-between border-t border-slate-200 mt-1 pt-1 font-semibold">
+                               <span>Total teóricas</span>
+                               <span className="tabular-nums">{result.realDaysTheory} dias = {result.realTheoryHours}h</span>
+                             </div>
+                           </div>
+                           <div>
+                             <p className="font-semibold text-slate-700 mb-1">Práticas reais</p>
+                             {practiceRows.map(r => <Row key={r.label} {...r} />)}
+                             <div className="flex justify-between border-t border-slate-200 mt-1 pt-1 font-semibold">
+                               <span>Total práticas</span>
+                               <span className="tabular-nums">{result.realDaysPractice} dias = {result.realPracticeHours}h</span>
+                             </div>
+                           </div>
+                         </div>
+                         {noCreditRows.length > 0 && (
+                           <div className="mt-4">
+                             <p className="font-semibold text-slate-700 mb-1">Quadradinhos que não entram na soma</p>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                               {noCreditRows.map(r => <Row key={r.label} {...r} hideHours />)}
+                             </div>
+                           </div>
+                         )}
+                         {b.doubleCreditDays > 0 && (
+                           <p className="mt-4 px-3 py-2 rounded bg-amber-50 border border-amber-200 text-amber-800">
+                             {b.doubleCreditDays} quadradinho{b.doubleCreditDays === 1 ? '' : 's'} de recesso/emenda conta{b.doubleCreditDays === 1 ? '' : 'm'} ao mesmo tempo como aula teórica e como prática na empresa. Por isso o Total em dias ({b.distinctDays}) é menor que Teóricas + Práticas ({result.realDaysTheory + result.realDaysPractice}).
+                           </p>
+                         )}
+                       </div>
+                     );
+                   })()}
+
+                   <p className="px-6 py-3 text-xs text-slate-500 border-t border-slate-100 bg-slate-50">
+                     <strong className="text-slate-600">Reais</strong> = contagem exata dos quadradinhos do calendário (cada um vale 6h). <strong className="text-slate-600">Oficial</strong> = carga contratual que vai para o PDF/Excel. Divergência em <span className="text-red-600 font-medium">vermelho</span> (abaixo do oficial) ou <span className="text-amber-600 font-medium">laranja</span> (acima do oficial).
+                   </p>
                 </div>
 
                 {/* Legend Preview */}
