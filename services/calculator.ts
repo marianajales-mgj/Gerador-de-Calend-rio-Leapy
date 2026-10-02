@@ -271,11 +271,10 @@ const runSimulation = (
           if (isInitialImmersionPhase && data.immersionDaysEnd === 0 && isBridgeHoliday) {
               // Presencial-format initial immersion EXTENDS past holidays and emendas (the
               // window was sized to N real attendance days), so an emenda inside it is not
-              // an immersion day: no immersion credit, the apprentice goes to the company.
+              // an immersion day: it credits no hours at all (the window was extended to
+              // compensate it).
               dayType = DayType.THEORY_RECESS;
               description = 'Emenda de Feriado';
-              if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
-              loopPracticeHours += HOURS_PER_DAY;
           } else if (isInitialImmersionPhase || isFinalImmersionPhase) {
               // Immersion is an intensive, pre-committed block: recess and bridge
               // holidays only interrupt the ongoing weekly routine, never immersion -
@@ -290,18 +289,15 @@ const runSimulation = (
           } else if (isRecessPeriod) {
               // School recess applies to the course day in EVERY December of the contract,
               // whether or not the official theory load is already covered - the class
-              // itself pauses and the apprentice goes to the company.
+              // itself pauses. Each square counts ONCE: as a theory class when the recess
+              // does not impact the load, and never as practice (the course day is the
+              // theory-track day of the week).
               dayType = DayType.THEORY_RECESS;
               description = 'Recesso Teórico';
               if (data.recessImpact === 'NO_IMPACT' && isWeeklyTheoryQuotaOpen()) {
                   theoryHoursConsumed += HOURS_PER_DAY;
                   loopTheoryHours += HOURS_PER_DAY;
               }
-              // Recesso teórico geralmente implica prática na empresa - but never credit
-              // (report) practice hours past the official target, even though the day is
-              // still genuinely worked (never left blank).
-              if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
-              loopPracticeHours += HOURS_PER_DAY;
           } else if (isBridgeHoliday) {
               dayType = DayType.THEORY_RECESS;
               description = 'Emenda de Feriado';
@@ -309,8 +305,6 @@ const runSimulation = (
                   theoryHoursConsumed += HOURS_PER_DAY;
                   loopTheoryHours += HOURS_PER_DAY;
               }
-              if (!isPracticeFull()) practiceHoursConsumed += HOURS_PER_DAY;
-              loopPracticeHours += HOURS_PER_DAY;
           } else if (isWeeklyTheoryQuotaOpen()) {
               dayType = DayType.THEORY;
               description = scheduledDesc;
@@ -375,25 +369,20 @@ const runSimulation = (
 const buildCreditBreakdown = (calendar: CalendarDay[]): CreditBreakdown => {
   const b: CreditBreakdown = {
     theory: { immersion: 0, weekly: 0, recess: 0, holiday: 0 },
-    practice: { practice: 0, recess: 0 },
+    practice: { practice: 0 },
     noCredit: { weeklyCovered: 0, practiceOver: 0, immersionOver: 0, recess: 0, holiday: 0, manual: 0 },
-    distinctDays: 0,
-    doubleCreditDays: 0,
   };
   for (const d of calendar) {
     if (isWeekend(d.date) && d.dayType !== DayType.HOLIDAY) continue;
     const t = !!d.theoryCredit;
     const p = !!d.practiceCredit;
-    if (t || p) b.distinctDays++;
-    if (t && p) b.doubleCreditDays++;
     if (d.description === 'Alteração Manual') { if (!t && !p) b.noCredit.manual++; continue; }
     switch (d.dayType) {
       case DayType.IMMERSION: if (t) b.theory.immersion++; else b.noCredit.immersionOver++; break;
       case DayType.THEORY: if (t) b.theory.weekly++; else b.noCredit.weeklyCovered++; break;
       case DayType.THEORY_RECESS:
         if (t) b.theory.recess++;
-        if (p) b.practice.recess++;
-        if (!t && !p) b.noCredit.recess++;
+        else b.noCredit.recess++;
         break;
       case DayType.HOLIDAY:
         if (t) b.theory.holiday++;
@@ -521,14 +510,9 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
       calendar.push({ date: new Date(topUpDate), dayType: DayType.HOLIDAY, description: holidayInfo.name, isEnd: false });
     } else if (isDesignatedDay) {
       if (inRecess || isBridgeHolidayDate(topUpDate, data)) {
-        // Recess / emenda on the course day: class pauses, apprentice goes to the company
-        // (same treatment as the main simulation). Never a theory reposição day.
-        const credits = practiceHoursConsumed < data.totalPracticeHours;
-        calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY_RECESS, description: inRecess ? 'Recesso Teórico' : 'Emenda de Feriado', isEnd: credits, theoryCredit: false, practiceCredit: credits });
-        if (credits) {
-          practiceHoursConsumed += HOURS_PER_DAY;
-          endDate = new Date(topUpDate);
-        }
+        // Recess / emenda on the course day: the class pauses (same treatment as the main
+        // simulation, no hours credited in this tail). Never a theory reposição day.
+        calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY_RECESS, description: inRecess ? 'Recesso Teórico' : 'Emenda de Feriado', isEnd: false, theoryCredit: false, practiceCredit: false });
       } else if (theoryHoursConsumed < data.totalTheoryHours) {
         calendar.push({ date: new Date(topUpDate), dayType: DayType.THEORY, description: 'Reposição de Carga Teórica', modality: data.modalityWeekly, isEnd: true, theoryCredit: true, practiceCredit: false });
         theoryHoursConsumed += HOURS_PER_DAY;

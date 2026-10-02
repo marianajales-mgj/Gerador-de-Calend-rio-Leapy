@@ -793,8 +793,8 @@ const App: React.FC = () => {
                          </tr>
                          <tr className="bg-slate-50 font-semibold text-slate-800">
                            <td className="px-6 py-3">Total</td>
-                           <td className={`px-6 py-3 ${diffClass(result.creditBreakdown.distinctDays, officialTotalDays)}`}>
-                             {result.creditBreakdown.distinctDays}{renderDiff(result.creditBreakdown.distinctDays, officialTotalDays, '')}
+                           <td className={`px-6 py-3 ${diffClass(result.realDaysTheory + result.realDaysPractice, officialTotalDays)}`}>
+                             {result.realDaysTheory + result.realDaysPractice}{renderDiff(result.realDaysTheory + result.realDaysPractice, officialTotalDays, '')}
                            </td>
                            <td className={`px-6 py-3 ${diffClass(result.realTheoryHours + result.realPracticeHours, formData.totalTheoryHours + formData.totalPracticeHours)}`}>
                              {result.realTheoryHours + result.realPracticeHours}h
@@ -827,7 +827,6 @@ const App: React.FC = () => {
                      ];
                      const practiceRows = [
                        { color: '#FEF08A', label: 'Prática', days: b.practice.practice },
-                       { color: '#bfdbfe', label: 'Recesso / emenda com prática na empresa', days: b.practice.recess },
                      ];
                      const noCreditRows = [
                        { color: '#373afd', label: 'Dia de curso com carga teórica já cumprida', days: b.noCredit.weeklyCovered },
@@ -865,11 +864,6 @@ const App: React.FC = () => {
                                {noCreditRows.map(r => <Row key={r.label} {...r} hideHours />)}
                              </div>
                            </div>
-                         )}
-                         {b.doubleCreditDays > 0 && (
-                           <p className="mt-4 px-3 py-2 rounded bg-amber-50 border border-amber-200 text-amber-800">
-                             {b.doubleCreditDays} quadradinho{b.doubleCreditDays === 1 ? '' : 's'} de recesso/emenda conta{b.doubleCreditDays === 1 ? '' : 'm'} ao mesmo tempo como aula teórica e como prática na empresa. Por isso o Total em dias ({b.distinctDays}) é menor que Teóricas + Práticas ({result.realDaysTheory + result.realDaysPractice}).
-                           </p>
                          )}
                        </div>
                      );

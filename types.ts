@@ -110,10 +110,8 @@ export interface CalendarDay {
 // Count of calendar squares ("quadradinhos") by the colour/role they play in the REAL hours.
 export interface CreditBreakdown {
   theory: { immersion: number; weekly: number; recess: number; holiday: number };
-  practice: { practice: number; recess: number };
+  practice: { practice: number };
   noCredit: { weeklyCovered: number; practiceOver: number; immersionOver: number; recess: number; holiday: number; manual: number };
-  distinctDays: number; // squares that credit anything (a recess/emenda square can credit both)
-  doubleCreditDays: number; // squares that credit theory AND practice at the same time
 }
 
 export interface HolidayReportItem {
