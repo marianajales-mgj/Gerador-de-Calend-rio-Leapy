@@ -90,7 +90,8 @@ const runSimulation = (
   startDate: Date,
   initialImmersionWindow: ImmersionWindow | null,
   finalImmersionWindow: ImmersionWindow | null,
-  recessWindows: ImmersionWindow[]
+  recessWindows: ImmersionWindow[],
+  finalImmersionCreditHours: number
 ): SimulationResult => {
   let theoryHoursConsumed = 0;
   let practiceHoursConsumed = 0;
@@ -116,7 +117,10 @@ const runSimulation = (
   const overrideDates = Object.keys(data.overrides || {}).map(d => parseISO(d));
   const lastOverrideDate = overrideDates.length > 0 ? new Date(Math.max(...overrideDates.map(d => d.getTime()))) : null;
 
-  const hoursForFinalImmersion = data.immersionDaysEnd * HOURS_PER_DAY;
+  // Hours Final Immersion will really credit: nominal days x 6h, minus any holiday that
+  // lands inside its fixed window (a holiday inside credits nothing), so the weekly
+  // course days BEFORE it carry that difference instead of leaving a reposição tail.
+  const hoursForFinalImmersion = finalImmersionCreditHours;
   // Reserves room for Final Immersion's own fixed contribution: the ongoing weekly
   // course day stops crediting NEW theory hours once what's left to reach the official
   // load is small enough for Immersion alone to cover - otherwise the weekly day would
@@ -424,22 +428,56 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
   //   only): the window EXTENDS through holidays/emendas, since it needs that many actual
   //   attendance days.
   const isHybridImmersionShape = data.immersionDaysEnd > 0;
+
+  // Hybrid initial immersion is a frame of full Mon-Fri weeks (10 days = 2 weeks) that
+  // starts in the week of the start date: it never extrapolates that frame. When the
+  // start date is not a Monday (e.g. the Monday is a holiday), the window ends on the
+  // Friday that closes the frame instead of counting N weekdays past it.
+  const hybridInitialEnd = (): Date => {
+    const byDays = nthWeekdayFrom(startDate, data.immersionDays);
+    const anchorMonday = isWeekend(startDate)
+      ? addDays(startDate, getDay(startDate) === 6 ? 2 : 1)
+      : mondayOfWeek(startDate);
+    const weeks = Math.ceil(data.immersionDays / 5);
+    const frameEnd = addDays(anchorMonday, 7 * (weeks - 1) + 4);
+    return isAfter(byDays, frameEnd) ? frameEnd : byDays;
+  };
+
   const initialImmersionWindow: ImmersionWindow | null = data.immersionDays > 0
     ? {
         start: startDate,
         end: isHybridImmersionShape
-          ? nthWeekdayFrom(startDate, data.immersionDays)
+          ? hybridInitialEnd()
           : nthAttendanceDayFrom(startDate, data.immersionDays, data),
       }
     : null;
 
+  // Hours a given Final Immersion window will really credit: its weekdays minus the
+  // holidays that fall inside it.
+  const attendanceHoursIn = (w: ImmersionWindow): number => {
+    let hours = 0;
+    for (let d = w.start; !isAfter(d, w.end); d = addDays(d, 1)) {
+      if (!isWeekend(d) && !getHolidayInfo(d, data.city, data.state, data.excludedHolidays)) hours += HOURS_PER_DAY;
+    }
+    return hours;
+  };
+
   let finalImmersionWindow: ImmersionWindow | null = null;
+  let finalImmersionCreditHours = data.immersionDaysEnd * HOURS_PER_DAY;
 
   if (data.immersionDaysEnd > 0) {
-    // Pass 1: estimate where Final Immersion would naturally fall (dynamic trigger).
-    const estimate = runSimulation(data, startDate, initialImmersionWindow, null, recessWindows);
+    // Pass 1: estimate where Final Immersion would naturally fall (dynamic trigger). It is
+    // repeated until the hours assumed for Final Immersion match what its window really
+    // credits: a holiday inside the window removes 6h, and those 6h must be given by one
+    // more course day BEFORE the immersion (not by a reposição tail after it).
+    const history: Array<{ credit: number; window: ImmersionWindow }> = [];
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const estimate = runSimulation(data, startDate, initialImmersionWindow, null, recessWindows, finalImmersionCreditHours);
+      if (!estimate.finalImmersionStart) {
+        finalImmersionWindow = null;
+        break;
+      }
 
-    if (estimate.finalImmersionStart) {
       // Snap Final Immersion to start on a Monday - but only ever FORWARD, never earlier.
       // estimate.finalImmersionStart is the earliest day where practice hours are already
       // fully accrued; picking an earlier Monday would start Immersion (a fixed, non-
@@ -471,11 +509,28 @@ export const calculateCalendar = (data: AppFormData): CalculationResult => {
       }
 
       finalImmersionWindow = candidate;
+
+      // The estimate can oscillate between two weeks (e.g. one window holds 2 holidays and
+      // the next holds 1, so the credit assumed for each never matches the other). When an
+      // assumed credit repeats, keep the EARLIEST window of the cycle: a labeled one-day
+      // reposição after it is better than a whole idle week before the immersion.
+      const firstVisit = history.findIndex(h => h.credit === finalImmersionCreditHours);
+      if (firstVisit >= 0) {
+        const cycle = history.slice(firstVisit).map(h => h.window);
+        finalImmersionWindow = cycle.reduce((best, w) => (isBefore(w.start, best.start) ? w : best), cycle[0]);
+        break;
+      }
+      history.push({ credit: finalImmersionCreditHours, window: candidate });
+
+      const attended = attendanceHoursIn(candidate);
+      if (attended === finalImmersionCreditHours) break;
+      finalImmersionCreditHours = attended;
     }
+    if (finalImmersionWindow) finalImmersionCreditHours = attendanceHoursIn(finalImmersionWindow);
   }
 
   // Pass 2: real run, with Final Immersion pinned to its Monday-aligned window.
-  const pass2 = runSimulation(data, startDate, initialImmersionWindow, finalImmersionWindow, recessWindows);
+  const pass2 = runSimulation(data, startDate, initialImmersionWindow, finalImmersionWindow, recessWindows, finalImmersionCreditHours);
   const { calendar, holidayReport } = pass2;
   let endDate = pass2.endDate;
   let theoryHoursConsumed = pass2.theoryHoursConsumed;
